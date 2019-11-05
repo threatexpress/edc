@@ -1,0 +1,62 @@
+{% extends "edc/base2.html" %}
+
+{% block content %}
+ <h1>Payload List ({{ page_obj.paginator.count }})</h1>
+ <a class="btn btn-secondary btn-sm ml-4 mr-4 mt-1 mb-1" href="{% url 'payloadinfo-create' %}">New Payload</a>
+ <div class="row justify-content-center">
+ <div class="col-auto">	
+		 <table class="table table.responsive table.striped table-bordered table-hover">
+		 	<thead>
+			 	<tr>
+                                        <th>Entry</th>
+			 		<th>Infrastructure</th>
+			 		<th>URL</th>
+			 		<th>IP</th>
+			 		<th>Protocol</th>
+			 		<th>Usage</th>
+					<th>Payload</th>
+			 		<th>Payload File</th>
+			 	</tr>
+		 	</thead>
+ {% for payloaddata in payloaddata %}
+ 			<tbody id = "table1">
+			 	<tr>
+				    <td><a href="{% url 'payloadinfo-detail' payloaddata.id %}">Detail</a></td>
+				    <td>{{ payloaddata.inf }}</td>
+				    <td>{{ payloaddata.url }}</td>
+				    <td>{{ payloaddata.ip }}</td>
+				    <td>{{ payloaddata.proto }}</td>
+				    <td>{{ payloaddata.usage }}</td>
+				    <td>{{ payloaddata.payld }}</td>
+				    {% if payloaddata.payldfile %}
+				    <td><a href="{{ payloaddata.payldfile.url }}">{{ payloaddata.payldfile }}</a></td>
+				    {% else %}
+				    <td>{{ payloaddata.payldfile}}</td>
+				    {% endif %}
+				</tr>
+			</tbody>
+ {% endfor %}
+		  </table>
+		</div>
+	</div>
+ {% if is_paginated %}
+ 	{% if page_obj.has_previous %}
+ 		<a class="btn btn-outline-info mb-4" href="?page=1">First</a>
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+ 	{% endif %}
+
+ 	{% for num in page_obj.paginator.page_range %}
+ 		{% if page_obj.number == num %}
+ 			<a class="btn btn-info mb-4" href="?page={{ num }}">{{ num }}</a>
+ 		{% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+ 			<a class="btn btn-outline-info mb-4" href="?page={{ num }}">{{ num }}</a>
+ 		{% endif %}
+ 	{% endfor %}
+
+ 	 {% if page_obj.has_next %}
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.next_page_number }}">Next</a>
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+ 	{% endif %}
+
+ {% endif %}
+{% endblock content %}

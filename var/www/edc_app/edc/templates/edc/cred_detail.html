@@ -1,0 +1,29 @@
+{% extends "edc/base2.html" %}
+
+{% block content %}
+	<h1>Credential Info</h1>
+	<article class="media content-section">
+	  <div class="media-body">
+	    <div class="article-metadata">
+	      <h2 class="article-title">{{ object.host }}</h2>
+	      <small class="text-muted">{{ object.ip }}</small>
+	      <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'cred-update' object.id %}">Update</a>
+	      <a class="btn btn-danger btn-sm ml-4 mt-1 mb-1" href="{% url 'cred-delete' object.id %}">Delete</a>
+	    </div>
+	    <p class="article-content">User: {{ object.username }}</p>
+	    <p class="article-content">Password: {{ object.passwd }}</p>
+	    <p class="article-content">Hash: {{ object.hashw }}</p>
+	    <p class="article-content">Token: {{ object.token }}</p>
+	    {% if object.tknfile %}
+	    <p class="article-content">Token File: <a href="{{ object.tknfile.url }}">{{ object.tknfile }}</a></p>
+	    {% else %}
+	    <p class="article-content">Token File: {{ object.tknfile }}</p>
+	    {% endif %}
+	    <p class="article-content">First Name: {{ object.first }}</p>
+	    <p class="article-content">Last Name: {{ object.last }}</p>
+	    <p class="article-content">Role: {{ object.role }}</p>
+	    <p class="article-content">Description: {{ object.description }}</p>
+	    
+	  </div>
+	</article>
+{% endblock content %}

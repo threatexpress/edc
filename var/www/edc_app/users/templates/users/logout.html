@@ -1,0 +1,9 @@
+{% extends "edc/base2.html" %}
+{% block content %}
+    <h2>Logout Successful</h2>
+	<div class="border-top pt-3">
+		<small class="text-muted">
+			<a href="{% url 'two_factor:login' %}">Log Back In</a>
+		</small>
+	</div>
+{% endblock content %}

@@ -1,0 +1,225 @@
+
+operator=testerld
+opid=2
+UToken="7ce256facbb85751e840ca4c486191dd58e33f00"
+edcp=https
+edc=redteam.guide
+
+function log_help {
+    echo
+    echo Usage: $0 [ options...]
+    echo
+    echo "log -l attackubuntu1 -k 43.44.54.55 -t tgthost1 -i 192.168.0.1 -p 445 -u http://www.news.com -n terminal -s screenshot_desc -d 'desc of action here' -c 'ping -c1 www.news.com'"
+    echo
+    echo '    -t, (Required= target) "target hostname"'
+    echo '    -i, (Required= ip) "target ip address"'
+    echo '    -p, (Required= port) "target ip address"'
+    echo '    -u, (Target URL) "url command affects"'
+    echo '    -s, (Screenshot Description) "short_screenshot_description"'
+    echo '    -n, (Tool) "terminal"'
+    echo '    -d, (Description) "Log Description"'
+    echo '    -l, (Source Host) "Passes hostname if omitted"'
+    echo '    -k, (Source IP) "Passes local ip if omitted"'
+    echo '    -c, (Commands) "command string'
+    echo
+    echo Use with -c only for interactive prompts.
+    return
+}
+
+
+function target_help {
+    echo
+    echo Usage: $0 [ options...]
+    echo
+    echo target -t tgthost1 -i 192.168.0.1 -n net5 -u admin -d adminwks -c access to all segments
+    echo
+    echo '    -t, (Required= target) "target hostname"'
+    echo '    -i, (ip) "target ip address"'
+    echo '    -n, (Network) "network info"'
+    echo '    -u, (Target username) "username"'
+    echo '    -d, (Description) "System Description"'
+    echo '    -c, (Comments) "Useful Comments'
+    echo
+    echo Use target without options for interactive prompts.
+    return
+}
+
+function cred_help {
+    echo
+    echo Usage: $0 [ options...]
+    echo
+    echo cred -u cmduser4 -p cmdpass4 -n hashgoeshere -t cmdu4:jaldkjsfldsjf -k /home/james/Desktop/token1.tkn -f charlie -l migo -r users -d keyboarder 
+    echo
+    echo '    -u, (Required= Username) "target username"'
+    echo '    -p, (Password) "usser password"'
+    echo '    -n, (Hash) "userhash"'
+    echo '    -t, (Token String) "cmdu4:somedatahere"'
+    echo '    -k, (Token File Path) "/full/path/to/file"'
+    echo '    -f, (First Name) "Charlie"'
+    echo '    -l, (Last Name) "Migo"'
+    echo '    -r, (Role or Position) "User"'
+    echo '    -d, (Description) "Useful description'
+    echo
+    echo Use cred without options for interactive prompts.
+    return
+}
+
+function log {
+    operator=$operator
+    sip=$(my_ip)
+    shost=`hostname`
+    tool=terminal
+
+    if [[ $# -lt 1 ]]; then
+        log_help
+    else
+        local OPTIND
+        while getopts "ht:i:p:u:s:c:n:d:l:k:" option; do
+            case $option in
+            h) log_help && return 1;;
+            t) dhost=$OPTARG;;
+            i) dip=$OPTARG;;
+            p) dport=$OPTARG;;
+            u) durl=$OPTARG;;
+            s) ssdesc=$OPTARG;;
+            c) cmda=$OPTARG;;
+            n) tool=$OPTARG;;
+            d) desc=$OPTARG;;
+            l) shost=$OPTARG;;
+            k) sip=$OPTARG;;
+            *) log_help && return 1;;
+            esac
+        done
+        
+        if [[ -z "$cmda" ]]; then
+            printf "\nExample: log -c 'ping www.news.com'\n\n"
+        fi
+
+
+        if [[ -z "$dhost" ]]; then
+            read -p "Enter Destination Host: " dhost
+            read -p "Enter Desination IP: " dip
+            read -p "Destination Port: " dport
+            read -p "URL: " durl
+            read -p "short_screenshot_description, example: user_login:  " ssdesc
+        fi
+    fi
+
+        if [[ "$cmda" && "$dhost" && "$dip" && "$dport" ]]; then
+            oput=$($cmda 2>&1 | tee /dev/tty)
+            now=$(TZ=UTC-10 date +%Y%m%d_%H%M%S)
+            file=$now"_"$ssdesc"_"$operator".png"
+            sleep 2
+            gnome-screenshot -w -f $file
+            sleep 1
+            curl -F "src_host=$shost" -F "src_ip=$sip" -F "dst_host=$dhost" -F "dst_ip=$dip" -F "dst_port=$dport" -F "url=$durl" -F "tool=$tool" -F "cmds=$cmda" -F "output=$oput" -F "scrsht=@$file" -F "operator_id=$opid" -H "Authorization: Token $UToken" $edcp://$edc/oplog/
+        
+            printf "\n\nScreenshot File: "$file"\n"
+        else
+            return
+        fi
+
+    dhost=""
+    dip=""
+    dport=""
+    durl=""
+    ssdesc=""
+    desc=""
+    oput=""
+    cmda=""
+}
+
+function target() {
+    if [[ $# -lt 1 ]]; then
+        read -p "Host (Required): " tgthost
+        read -p "Enter IP (Required): " tgtip
+        read -p "Enter network: " tgtnet
+        read -p "Enter any known users:  " tgtuser
+        read -p "Host Description: " tgtdesc
+        read -p "Comments: " tgtcomms
+    fi
+
+    if [[ $# -ge 1 ]]; then
+        local OPTIND
+        while getopts "ht:i:n:u:d:c:" option; do
+           case $option in
+            h) target_help ;;
+            t) tgthost=$OPTARG;;
+            i) tgtip=$OPTARG;;
+            n) tgtnet=$OPTARG;;
+            u) tgtuser=$OPTARG;;
+            d) tgtdesc=$OPTARG;;
+            c) tgtcomms=$OPTARG;;
+            *) target_help;;
+            esac
+        done
+    fi
+
+    if [[ -z "$tgthost" && "tgtip" ]]; then
+        echo "Please enter target and ip"
+    else
+        curl -d "host=$tgthost&ip=$tgtip&network=$tgtnet&users=$tgtuser&description=$tgtdesc&comments=$tgtcomms" $edcp://$edc/target/ -H "Authorization: Token $UToken"
+    fi
+
+    tgthost=""
+    tgtip=""
+    tgtnet=""
+    tgtuser=""
+    tgtdesc=""
+    tgtcomms=""
+}
+
+function cred {
+    if [[ $# -lt 1 ]]; then
+        read -p "Enter username (Required): " creduser
+        read -p "Enter password: " credpass
+        read -p "Enter hash: " credhash
+        read -p "Enter token: " credtoken
+        read -p "Enter token file location: " credtknfile
+        read -p "Enter First name: " credfirst
+        read -p "Enter Last name: " credlast
+        read -p "Enter role or position: " credrole
+        read -p "Enter description: " creddesc
+    fi
+
+    if [[ $# -ge 1 ]]; then
+        local OPTIND
+        while getopts "hu:p:n:t:k:f:l:r:d:" option; do
+           case $option in
+            h) cred_help ;;
+            u) creduser=$OPTARG;;
+            p) credpass=$OPTARG;;
+            n) credhash=$OPTARG;;
+            t) credtoken=$OPTARG;;
+            k) credtknfile=$OPTARG;;
+            f) credfirst=$OPTARG;;
+            l) credlast=$OPTARG;;
+            r) credrole=$OPTARG;;
+            d) creddesc=$OPTARG;;
+            *) cred_help;;
+            esac
+        done
+    fi
+
+    if [[ -z "$creduser" ]]; then
+        echo "Please enter username"
+    else
+        if [[ -z "$credtknfile" ]]; then
+            curl -F "username=$creduser" -F "passwd=$credpass" -F "hashw=$credhash" -F "token=$credtoken" -F "first=$credfirst" -F "last=$credlast" -F "role=$credrole" -F "description=$creddesc" $edcp://$edc/cred/ -H "Authorization: Token $UToken"
+        else
+            curl -F "username=$creduser" -F "passwd=$credpass" -F "hashw=$credhash" -F "token=$credtoken" -F "tknfile=@$credtknfile" -F "first=$credfirst" -F "last=$credlast" -F "role=$credrole" -F "description=$creddesc" $edcp://$edc/cred/ -H "Authorization: Token $UToken"
+        fi
+    fi
+
+    creduser=""
+    credpass=""
+    credhash=""
+    credtoken=""
+    credtknfile=""
+    credfirst=""
+    credlast=""
+    credrole=""
+    creddesc=""
+}
+
+

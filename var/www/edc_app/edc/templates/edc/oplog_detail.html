@@ -1,0 +1,55 @@
+{% extends "edc/base2.html" %}
+
+{% block content %}
+	<h1>Operator Log</h1>
+	<article class="media content-section">
+	  <div class="media-body">
+	    <div class="article-metadata">
+	      <h2 class="article-title">{{ object.dst_host }}</h2>
+	      <small class="text-muted">{{ object.dst_ip }} : {{ object.dst_port }}</small>
+	      <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-update' object.id %}">Update</a>
+	      <a class="btn btn-danger btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-delete' object.id %}">Delete</a>
+	    </div>
+	    <p class="article-content">Start: {{ object.start_time|date:"Ymd_Hms" }}</p>
+	    <p class="article-content">Stop: {{ object.stop_time|date:"Ymd_Hms" }}</p>
+	    <p class="article-content"> Src Host: {{ object.src_host }}</p>
+	    <p class="article-content">Src IP: {{ object.src_ip }}</p>
+	    <p class="article-content">Src Port: {{ object.src_port }}</p>
+	    <p class="article-content">Dst Host: {{ object.dst_host }}</p>
+	    <p class="article-content">Dst IP: {{ object.dst_ip }}</p>
+	    <p class="article-content">Dst Port: {{ object.dst_port }}</p>
+	    <p class="article-content">Pivot Host: {{ object.piv_host }}</p>
+	    <p class="article-content">Pivot IP: {{ object.piv_ip }}</p>
+	    <p class="article-content">Pivot Port: {{ object.piv_port }}</p>
+	    {% if object.url %}
+	    <p class="article-content">URL: <a href="{{ object.url }}">{{ object.url }}</a></p>
+	    {% else %}
+	    <p class="article-content">URL: {{ object.url }}</p>
+	    {% endif %}
+	    <p class="article-content">Tool: {{ object.tool }}</p>
+	    <p class="article-content">Description: {{ object.description }}</p>
+	    <p class="article-content">Result: {{ object.result }}</p>
+	    {% if object.scrsht %}
+	    <p class="article-content">Screenshot: <a href="{{ object.scrsht.url }}">{{ object.scrsht }}</a></p>
+	    {% else %}
+	    <p class="article-content">Screenshot: {{ object.scrsht }}</p>
+	    {% endif %}
+	    <p class="article-content">Mods: {{ object.mods }}</p>
+	    {% if object.exfil %}
+		<p class="article-content">Exfil: <a href="{{object.exfil.url }}">{{ object.exfil }}</a></p>
+		{% else %}
+		<p class="article-content">Exfil: {{ object.exfil }}</p>
+		{% endif %}
+	    <p class="article-content">Comments: {{ object.comments }}</p>
+	    <a class="mr-2">Operator: <a href="{% url 'operator-oplogs' object.operator.username %}">{{ object.operator }}</a>
+	  </div>
+	</article>
+
+	<article class="media content-section">
+	  <div class="media-body">
+	    <p class="article-content">Command:<br /> {{ object.cmds }}</p>
+	    <p class="article-content">Output:<br /> {{ object.output }}</p>
+	  </div>
+	</article>
+     {{ oplog.srchost }}
+{% endblock content %}

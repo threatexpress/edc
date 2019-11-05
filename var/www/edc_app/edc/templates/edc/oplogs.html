@@ -1,0 +1,91 @@
+{% extends "edc/base2.html" %}
+
+{% block content %}
+ <h1>Operator Logs ({{ page_obj.paginator.count }})</h1>
+ <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-create' %}">New Log</a><a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplogexport' %}">Export</a>
+<table class="table table.responsive table.striped table table-bordered table-hover hoverTable">
+	<thead>
+ 	<tr>
+ 		<th>Entry</th>
+ 		<th>Start Time</th>
+ 		<th>Stop Time</th>
+ 		<th>SRC Host</th>
+ 		<th>SRC IP</th>
+ 		<th>DST Host</th>
+ 		<th>DST IP</th>
+ 		<th>DST Port</th>
+ 		<th>Pivot Host</th>
+ 		<th>Pivot IP</th>
+ 		<th>Pivot Port</th>
+ 		<th>URL</th>
+ 		<th>Tool</th>
+ 		<th>Description</th>
+ 		<th>Result</th>
+ 		<th>Screenshot</th>
+ 		<th>Mods</th>
+ 		<th>Exfil</th>
+ 		<th>Comments</th>
+ 		<th>Operator</th>
+ 	</tr>
+	</thead>
+{% for opdata in opdata %}
+	<tbody id = "table1">
+ 	<tr>
+	    <td><a href="{% url 'oplog-detail' opdata.id %}">Detail</a></td>
+	    <td>{{ opdata.start_time|date:"Ymd_Hms" }}</td>
+	    <td>{{ opdata.stop_time|date:"Ymd_Hms" }}</td>
+	    <td>{{ opdata.src_host }}</td>
+	    <td>{{ opdata.src_ip }}</td>
+	    <td>{{ opdata.dst_host }}</td>
+	    <td>{{ opdata.dst_ip }}</td>
+	    <td>{{ opdata.dst_port }}</td>
+	    <td>{{ opdata.piv_host }}</td>
+	    <td>{{ opdata.piv_ip }}</td>
+	    <td>{{ opdata.piv_port }}</td>
+	    {% if opdata.url %}
+	    	<td><a href="{{ opdata.url }}">{{ opdata.url }}</a></td>
+	    {% else %}
+	    	<td>{{ opdata.url }}</td>
+	    {% endif %}
+	    <td>{{ opdata.tool }}</td>
+	    <td>{{ opdata.description }}</td>
+	    <td>{{ opdata.result }}</td>
+	    {% if opdata.scrsht %}
+	    	<td><a href="{{ opdata.scrsht.url }}">{{ opdata.scrsht }}</a></td>
+	    {% else %}
+	    	<td>{{ opdata.scrsht }}</td>
+	    {% endif %}
+	    <td>{{ opdata.mods }}</td>
+	    {% if opdata.exfil %}
+	    	<td><a href="{{ opdata.exfil.url }}">{{ opdata.exfil }}</a></td>
+	    {% else %}
+	    	<td>{{ opdata.exfil }}</td>
+	    {% endif %}
+	    <td>{{ opdata.comments }}</td>
+	    <td><a class="mr-2" href="{% url 'operator-oplogs' opdata.operator.username %}">{{ opdata.operator }}</a></td>
+	</tr>
+</tbody>
+
+{% endfor %}
+</table>
+ {% if is_paginated %}
+ 	{% if page_obj.has_previous %}
+ 		<a class="btn btn-outline-info mb-4" href="?page=1">First</a>
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+ 	{% endif %}
+
+ 	{% for num in page_obj.paginator.page_range %}
+ 		{% if page_obj.number == num %}
+ 			<a class="btn btn-info mb-4" href="?page={{ num }}">{{ num }}</a>
+ 		{% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+ 			<a class="btn btn-outline-info mb-4" href="?page={{ num }}">{{ num }}</a>
+ 		{% endif %}
+ 	{% endfor %}
+
+ 	 {% if page_obj.has_next %}
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.next_page_number }}">Next</a>
+ 		<a class="btn btn-outline-info mb-4" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+ 	{% endif %}
+
+ {% endif %}
+{% endblock content %}
