@@ -28,6 +28,7 @@ There are options for using S3 storage and enabling the password reset by email 
 - decon/
 - tag/ - quick identification of tagged logs (tag/c2)
 - user/ - list of logs per operator (user/testerld)
+- rta/ - admin dash
 
 
 #### Rest Framework API
