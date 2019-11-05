@@ -88,7 +88,7 @@ It is recommended to remove the default accounts and create new once functionali
 
 ##### Account Permissions
 |User|Info|Oplog|Targets|Creds|Payload|Deconfliction|
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 |edcadmin|RWD|RWD|RWD|RWD|RWD|RWD|
 |testerld|RWD|RWD|RWD|RWD|RWD|RWD|
 |testerop|RW|RWD|RWD|RWD|RWD|RW|
