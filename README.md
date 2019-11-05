@@ -196,12 +196,12 @@ Skip to pip requirements now if doing a direct copy
 Est virtual env
 ```
 python3 -m venv /var/www/edc_app/venv
-source venv/bin/activate
 ```
 
 #### Pip Requirements
 Install required pkgs in venv
 ```
+source venv/bin/activate
 pip3 install -r requirements.txt
 ```
 
