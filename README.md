@@ -7,6 +7,33 @@ It is expected to be used by only the RT members assigned to the operation and t
 
 There are options for using S3 storage and enabling the password reset by email feature. Simply uncomment and enter secrets as identified.
 
+<!-- MarkdownTOC depth=4 autolink=true -->
+
+- [General Info](#general-info)
+    - [APP Layout](#app-layout)
+        - [Views](#views)
+        - [URLs](#urls)
+        - [Rest Framework API](#rest-framework-api)
+- [Authentication and Authorization](#authentication-and-authorization)
+    - [Roles](#roles)
+    - [Role Permissions](#role-permissions)
+    - [Accounts](#accounts)
+    - [Account Permissions](#account-permissions)
+    - [2FA](#2fa)
+- [Additional Security Info](#additional-security-info)
+- [Setup](#setup)
+    - [Host](#host)
+    - [Virtual Environment](#virtual-environment)
+        - [Setup Venv](#setup-venv)
+        - [Pip Requirements](#pip-requirements)
+    - [Web Server](#web-server)
+        - [Sites Available](#sites-available)
+        - [File Permissions](#file-permissions)
+        - [Server Start](#server-start)
+- [Use](#use)
+
+<!-- /MarkdownTOC -->
+
 ## General Info
 
 ### App Layout
@@ -211,7 +238,7 @@ List of pkgs in pip3 requirements
 pip3 install django boto3 django-storages django-crispy-forms Pillow django-tables2 django-bootstrap-datepicker-plus djangorestframework djangorestframework-jsonapi django-taggit django-formtools babel django-otp qrcode django-two-factor-auth
 ```
 
-## Web Server
+### Web Server
 
 Modify urls if forgotten password email is used
 /var/www/edc_app/edc_app/urls.py
@@ -219,6 +246,7 @@ Modify urls if forgotten password email is used
 Uncomment 4 "path" patterns starting with "password"
 ```
 
+#### Sites Available
 /etc/apache2/sites-available
 - Rename configs to include your domain file names for apache
 - modify .conf 
@@ -230,7 +258,7 @@ Uncomment 4 "path" patterns starting with "password"
 
  LetsEncrypt with auto renewal (certbot) works extremely well.
 
-
+#### File Permissions
 Ensure file permissions
 ```
 sudo chown :www-data /var/www/edc_app/db.sqlite3
@@ -240,6 +268,7 @@ sudo chown -R :www-data /var/www/edc_app/media/
 sudo chmod -R 775 /var/www/edc_app/media
 ```
 
+#### Server start
 If you started a new venv, now would be a good time to collect. If not skip this command.
 ```
 python3 manage.py collectstatic
