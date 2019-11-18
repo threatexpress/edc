@@ -329,3 +329,4 @@ Note: The bashrc is recommended for use on a user's system as it saves terminal 
 - Interactive tables (Modify and DB update)
 - Physical Assessment Views (incl. mobile submissions)
 - Nested command escapes (and NULL BYTES)
+- Python API Client
