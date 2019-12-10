@@ -19,6 +19,7 @@ jmespath==0.9.4
 phonenumberslite==8.10.21
 Pillow==6.2.1
 pkg-resources==0.0.0
+python-dateutil==2.8.0
 pytz==2019.3
 qrcode==6.1
 s3transfer==0.2.1
