@@ -10,7 +10,7 @@
 	      <small class="text-muted">{{ opdata.dst_port }}</small>
 	    </div>
 	    <h2><a class="article-title" href="{% url 'oplog-detail' opdata.id %}">{{ opdata.dst_host }}</a></h2>
-	    <p class="article-content">Start: {{ opdata.start_time|date:"Ymd_Hms" }}</p>
+	    <p class="article-content">Start: {{ opdata.start_time|date:"Ymd_His" }}</p>
 	    <p class="article-content"> SRC Host: {{ opdata.src_host }}</p>
 	    <p class="article-content">SRC IP: {{ opdata.src_ip }}</p>
 	    <p class="article-content">Tool: {{ opdata.tool }}</p>

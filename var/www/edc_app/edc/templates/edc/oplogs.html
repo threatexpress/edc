@@ -32,8 +32,8 @@
 	<tbody id = "table1">
  	<tr>
 	    <td><a href="{% url 'oplog-detail' opdata.id %}">Detail</a></td>
-	    <td>{{ opdata.start_time|date:"Ymd_Hms" }}</td>
-	    <td>{{ opdata.stop_time|date:"Ymd_Hms" }}</td>
+	    <td>{{ opdata.start_time|date:"Ymd_His" }}</td>
+	    <td>{{ opdata.stop_time|date:"Ymd_His" }}</td>
 	    <td>{{ opdata.src_host }}</td>
 	    <td>{{ opdata.src_ip }}</td>
 	    <td>{{ opdata.dst_host }}</td>

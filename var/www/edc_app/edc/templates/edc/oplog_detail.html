@@ -10,8 +10,8 @@
 	      <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-update' object.id %}">Update</a>
 	      <a class="btn btn-danger btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-delete' object.id %}">Delete</a>
 	    </div>
-	    <p class="article-content">Start: {{ object.start_time|date:"Ymd_Hms" }}</p>
-	    <p class="article-content">Stop: {{ object.stop_time|date:"Ymd_Hms" }}</p>
+	    <p class="article-content">Start: {{ object.start_time|date:"Ymd_His" }}</p>
+	    <p class="article-content">Stop: {{ object.stop_time|date:"Ymd_His" }}</p>
 	    <p class="article-content"> Src Host: {{ object.src_host }}</p>
 	    <p class="article-content">Src IP: {{ object.src_ip }}</p>
 	    <p class="article-content">Src Port: {{ object.src_port }}</p>
