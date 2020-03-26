@@ -2,7 +2,7 @@
 
 {% block content %}
  <h1>Operator Logs ({{ page_obj.paginator.count }})</h1>
- <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-create' %}">New Log</a><a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplogexport' %}">Export</a>
+ <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog-create' %}">New Log</a><a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplogexport' %}">Export</a> <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'oplog2export' %}">Export Condensed</a>
 <table class="table table.responsive table.striped table table-bordered table-hover hoverTable">
 	<thead>
  	<tr>

@@ -30,6 +30,8 @@ from .views import (
     eventinfoViewSet,
     authview,
     oplogexport,
+    deconexport
+    oplog2export
     tagListView,
     pfile,
     payloadListView,
@@ -78,6 +80,8 @@ urlpatterns = [
     path(r'export/oplogs/', views.oplogexport, name='oplogexport'),
     path(r'export/targets/', views.targetexport, name='targetexport'),
     path(r'export/creds/', views.credexport, name='credexport'),
+    path(r'export/decon/', views.deconexport, name='deconexport'),
+    path(r'export/oplogs2/', views.oplog2export, name='oplog2export'),
     path('', include(router.urls)),
     #path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     #path('api-auth/', obtain_auth_token, name='api_token_auth'),

@@ -19,6 +19,8 @@ oentry = ['start_time', 'stop_time', 'src_host', 'src_ip', 'src_port', 'dst_host
 centry = ['username', 'passwd', 'hashw', 'token', 'tknfile', 'first', 'last', 'role', 'description']
 tentry = ['host', 'ip', 'network', 'users', 'description', 'comments']
 pentry = ['inf', 'url', 'ip', 'proto', 'usage', 'payld', 'payldfile']
+dentry = ['start_time', 'src_host', 'src_ip', 'dst_host', 'dst_ip']
+zentry = ['start_time', 'stop_time', 'src_host', 'src_ip', 'src_port', 'dst_host', 'dst_ip', 'dst_port', 'piv_host', 'piv_ip', 'piv_port', 'url', 'tool', 'cmds', 'description', 'result', 'scrsht', 'mods', 'exfil', 'comments', 'operator']
 
 @login_required
 def pfile (request, filename, document_root=None, show_indexes=False):
@@ -275,6 +277,36 @@ def oplogexport(request):
 		writer.writerow(log)
 	
 	return response
+
+@login_required
+@permission_required('edc.view_oplog')
+def oplog2export(request):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="deconfliction.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(zentry)
+
+        logs = oplog.objects.all().values_list('start_time', 'stop_time', 'src_host', 'src_ip', 'src_port', 'dst_host', 'dst_ip', 'dst_port', 'piv_host', 'piv_ip', 'piv_port', 'url', 'tool', 'cmds', 'description', 'result', 'scrsht', 'mods', 'exfil', 'comments', 'operator')
+        for log in logs:
+                writer.writerow(log)
+        
+        return response
+
+@login_required
+@permission_required('edc.view_oplog')
+def deconexport(request):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="deconfliction.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(dentry)
+
+        logs = oplog.objects.all().values_list('start_time', 'src_host', 'src_ip', 'dst_host', 'dst_ip')
+        for log in logs:
+                writer.writerow(log)
+        
+        return response
 
 @login_required
 @permission_required('edc.view_target')

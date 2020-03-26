@@ -2,6 +2,7 @@
 
 {% block content %}
  <h1>Deconfliction Data ({{ page_obj.paginator.count }})</h1>
+ <a class="btn btn-secondary btn-sm ml-4 mt-1 mb-1" href="{% url 'deconexport' %}">Export</a>
 		 <table class="table table.striped table table-bordered table-hover">
 		 	<thead>
 			 	<tr class="fixed">
