@@ -22,7 +22,7 @@ There are options for using S3 storage and enabling the password reset by email 
     - [2FA](#2fa)
 - [Additional Security Info](#additional-security-info)
 - [Setup](#setup)
-    - [Host](#host)
+    - [Server](#server)
     - [Virtual Environment](#virtual-environment)
         - [Setup Venv](#setup-venv)
         - [Pip Requirements](#pip-requirements)
@@ -30,7 +30,7 @@ There are options for using S3 storage and enabling the password reset by email 
         - [Sites Available](#sites-available)
         - [File Permissions](#file-permissions)
         - [Server Start](#server-start)
-- [Use](#use)
+- [Client/Use](#clientuse)
 
 <!-- /MarkdownTOC -->
 
@@ -161,7 +161,7 @@ Each account will need to enable 2FA via profile.
 
 ## Setup
 
-### Host
+### Server
 
 Install pkgs
 ```
@@ -185,9 +185,9 @@ Add to /etc/hosts
 cp files to appropriate locations
 ```
 cd to git dir
-sudo cp etc/config.json /etc/.
-sudo cp etc/apache2/sites-available/* /etc/apache2/sites-available/.
-sudo cp -R edc_app/ /var/www/.
+sudo cp server/etc/config.json /etc/.
+sudo cp server/etc/apache2/sites-available/* /etc/apache2/sites-available/.
+sudo cp -R server/var/www/edc_app/ /var/www/.
 ```
 
 Modify the "secrets" config
@@ -266,6 +266,8 @@ sudo chmod 664 edc_app/db.sqlite3
 sudo chown :www-data /var/www/edc_app
 sudo chown -R :www-data /var/www/edc_app/media/
 sudo chmod -R 775 /var/www/edc_app/media
+sudo chown -R :www-data /var/www/edc_app/protected/
+sudo chmod -R 775 /var/www/edc_app/protected
 ```
 
 #### Server start
@@ -297,10 +299,38 @@ sudo systemctl reload apache2
 
 ---
 
-## Use:
-- Manual entry
-- bash_functions (recommend creating binaries in path)
+## Client/Use:
+
+### Multiple Options
+- Manual entry (Fill out the web form)
+- Python Scripts
 ```
+    Modify config.edc: operator, opid, token, and server||domain
+    Move config.edc to /etc/
+    log.py: change path for screenshot
+
+    python3 log.py -h
+    python3 target.py -h
+    python3 cred.py -h
+```
+- Python Execs (recommend executables in path over scripts)
+```
+    Modify config.edc : operator, opid, token, and server domain
+    Move config.edc to /etc/
+    log.py: change path for screenshot
+
+    pyinstaller log.py --distpath /path_to_save_executable -F
+    pyinstaller target.py --distpath /path_to_save_executable -F
+    pyinstaller cred.py --distpath /path_to_save_executable -F
+    
+    log -h
+    target -h
+    cred -h
+```
+- bash_functions (bash provided by request, not required)
+```
+    Modify .bashrc : operator, opid, UToken, and edc domain
+    
     log -h
     cred -h
     target -h
@@ -318,15 +348,12 @@ curl -d 'src_host=attackimage2&src_ip=44.33.22.11&dst_host=corpwks01&dst_ip=143.
 
 ```
 
-Note: The bashrc is recommended for use on a user's system as it saves terminal logs locally. It also has several simple example functions for submitting data to EDC. These should be binaries or python execs in your path.
-
 ---
 
 ## To Do:
 - Install script
 - Remove redundant pkgs/requirements
-- Leverage more templates to reduce the code footprint
+- Leverage templates to reduce the code footprint
 - Interactive tables (Modify and DB update)
 - Physical Assessment Views (incl. mobile submissions)
 - Nested command escapes (and NULL BYTES)
-- Python API Client

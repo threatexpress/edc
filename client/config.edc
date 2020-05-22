@@ -1,0 +1,11 @@
+
+[auth]
+operator = james
+opid = 1
+token = entertokenhere
+[instance]
+lurl = https://domain/oplog/
+turl = https://domain/target/
+curl = https://domain/cred/
+
+
