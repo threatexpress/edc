@@ -160,6 +160,7 @@ Each account will need to enable 2FA via profile.
 ---
 
 ## Setup
+Ensure all packages are updated prior to use.
 
 ### Server
 
