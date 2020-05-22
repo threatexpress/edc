@@ -1,7 +1,7 @@
 Babel==2.7.0
 boto3==1.10.2
 botocore==1.13.2
-Django==2.2.8
+Django==2.2.10
 django-bootstrap-datepicker-plus==3.0.5
 django-crispy-forms==1.8.0
 django-formtools==2.1
@@ -17,7 +17,7 @@ docutils==0.15.2
 inflection==0.3.1
 jmespath==0.9.4
 phonenumberslite==8.10.21
-Pillow==6.2.1
+Pillow==6.2.2
 pkg-resources==0.0.0
 python-dateutil==2.8.0
 pytz==2019.3
