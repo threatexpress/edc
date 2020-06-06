@@ -1,7 +1,7 @@
 Babel==2.7.0
 boto3==1.10.2
 botocore==1.13.2
-Django==2.2.10
+Django==2.2.13
 django-bootstrap-datepicker-plus==3.0.5
 django-crispy-forms==1.8.0
 django-formtools==2.1
