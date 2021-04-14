@@ -352,9 +352,10 @@ curl -d 'src_host=attackimage2&src_ip=44.33.22.11&dst_host=corpwks01&dst_ip=143.
 ---
 
 ## To Do:
-- Install script
-- Remove redundant pkgs/requirements
-- Leverage templates to reduce the code footprint
-- Interactive tables (Modify and DB update)
-- Physical Assessment Views (incl. mobile submissions)
-- Nested command escapes (and NULL BYTES)
+App no longer maintained externally
+- ~Install script~
+- ~Remove redundant pkgs/requirements~
+- ~Leverage templates to reduce the code footprint~
+- ~Interactive tables (Modify and DB update)~
+- ~Physical Assessment Views (incl. mobile submissions)~
+- ~Nested command escapes (and NULL BYTES)~
