@@ -8,6 +8,9 @@ UToken="enteryourtokeninsidequoteshere"
 edcp=https
 edc=domain.com
 
+#Optionally set $HOME to event share root (recommended)
+# export HOME=/mnt/eventshare/
+
 #Uncomment to set shell for close after 240 seconds
 #This is useful for maintaining shorter log files
 #TMOUT=240
@@ -20,7 +23,7 @@ esac
 HISTCONTROL=ignoreboth
 HISTSIZE=1000
 HISTFILESIZE=2000
-HISTTIMEFORMAT='%Y%m%d_%H%M%S_%zUTC '
+HISTTIMEFORMAT='%Y%m%d_%H%M%S '
 
 shopt -s histappend
 shopt -s checkwinsize
@@ -74,6 +77,8 @@ if [ -x /usr/bin/dircolors ]; then
     alias l='ls -CF --color=auto'
     alias el='sudo $(history -p \!\!)'
     alias level='echo $SHLVL'
+    alias ext_ip='curl ifconfig.me'
+    alias netstati='lsof -P -i -n'
 fi
 
 if [ -f ~/.bash_aliases ]; then
@@ -100,7 +105,7 @@ if [ ! -d ~/.chrome_user ]; then
 fi
 alias chromium="chromium --user-data-dir ~/.chrome_user"
 
-CURDATE=`date '+%Y%m%d_%H%M%S.%N_%Z'`
+CURDATE=`date '+%Y%m%d_%H%M%S'`
 
 function my_ip {
 #    /sbin/ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}'
@@ -389,17 +394,17 @@ function disable_teamserver() {
     /bin/systemctl daemon-reload
 }
 
-alias ext_ip="curl ifconfig.me"
-
 function win_shutdown() {
     net rpc shutdown -I $1 -U $2%$3
 }
 
-alias netstati="lsof -P -i -n"
+#function termss() {
+#    local dt=$(date '+%Y%m%d_%H%M%S.%N_%Z')
+#    $1 | /usr/bin/convert -font "FreeMono" label:@- $HOME/logs/screenshots/${dt}_terminal_screenshot.png
+#}
 
-function termss() {
-    local dt=$(date '+%Y%m%d_%H%M%S.%N_%Z')
-    $1 | /usr/bin/convert -font "FreeMono" label:@- $HOME/logs/screenshots/${dt}_terminal_screenshot.png
+function sst() {
+    import /mnt/eventshare/logs/screenshots/${CURDATE}_$1_$2.png
 }
 
 function start_capture() {
