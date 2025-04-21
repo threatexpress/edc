@@ -1,0 +1,18 @@
+{% extends "admin/app_index.html" %}
+{% load i18n %}
+
+{# Add a custom section above or below the model list #}
+{% block content_title %}
+    {{ block.super }}
+
+{% endblock %}
+
+{# Or add it to the sidebar if you prefer #}
+{# {% block sidebar %}
+    {{ block.super }}
+    <div style="margin-top: 15px;">
+        <h3>{% translate 'Actions' %}</h3>
+        <a href="{% url 'export-all-zip' %}" class="button">{% translate 'Export All Files (Zip)' %}</a>
+        <a href="{% url 'download-db' %}" class="button" style="margin-left: 10px;">{% translate 'Download DB (SQLite)' %}</a>
+    </div>
+{% endblock %} #}
