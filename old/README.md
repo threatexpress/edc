@@ -1,3 +1,5 @@
+# OLD README, use only for reference if needed.
+
 # EVENT DATA COLLECTOR
  Event Data Collector (EDC) is a very basic application used to capture data on the fly. 
 
