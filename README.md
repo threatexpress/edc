@@ -111,8 +111,9 @@ curl -X POST http://127.0.0.1:8000/collector/api/oplog/ \
 - http://127.0.0.1:8000/collector/api/enumdata/
 
 #### GET via SESSION
-# Replace cookie values with ones from your browser's developer tools after logging in
 ```
+# Replace cookie values with ones from your browser's developer tools after logging in
+
 curl -X GET http://127.0.0.1:8000/collector/api/oplog/ \
      -H 'Accept: application/json' \
      -H 'Cookie: sessionid=YOUR_SESSION_ID; csrftoken=YOUR_CSRF_TOKEN' \
@@ -134,6 +135,7 @@ curl -X POST http://127.0.0.1:8000/collector/api/oplog/ \
            "target_id": 1
          }'
 ```
+---
 
 # If starting a new project. CAUTION: This reinitializes files
 ```
