@@ -112,202 +112,6 @@ function edc_token() {
 
 }
 
-function log {
-    # Assume 'operator' variable is set correctly in your environment
-    # Alternatively, get username: operator=$(whoami)
-    if [[ -z "$operator" ]]; then
-        echo "Warning: 'operator' variable not set, using 'unknown'." >&2
-        operator="unknown"
-    fi
-    local sip
-    # Ensure my_ip function exists or replace with alternative
-    if command -v my_ip &> /dev/null; then
-        sip=$(my_ip)
-    else
-        echo "Warning: my_ip function not found, using default IP." >&2
-        sip="127.0.0.1" # Default or use other method
-    fi
-    local shost
-    shost=$(hostname)
-    local tool="terminal" # Hardcoded tool
-
-    # --- Config Checks ---
-    if [[ -z "$EDC_API_URL" ]]; then echo "Error: EDC_API_URL not set." >&2; return 1; fi
-    if [[ -z "$EDC_API_TOKEN" ]]; then echo "Error: EDC_API_TOKEN not set." >&2; return 1; fi
-    if [[ $# -lt 1 ]]; then echo "Usage: log -d nmap -c 'your command here'" >&2; return 1; fi
-    if ! command -v curl &> /dev/null; then echo "Error: curl not found." >&2; return 1; fi
-    if ! command -v jq &> /dev/null; then echo "Error: jq not found." >&2; return 1; fi
-    if ! command -v import &> /dev/null; then echo "Warning: 'import' command (ImageMagick) not found. Screenshots disabled." >&2; fi
-
-    # --- API URLs and Auth ---
-    local base_url="${EDC_API_URL%/}"
-    local target_api_url="${base_url}/collector/api/targets/"
-    local oplog_api_url="${base_url}/collector/api/oplog/" # Correct endpoint path
-    local auth_header="Authorization: Token ${EDC_API_TOKEN}"
-
-    echo "Fetching targets from API..."
-    # --- Fetch All Targets ---
-    local all_targets_json="[]"
-    local next_url="${target_api_url}"
-    local http_code response_body target_count target_ids target_hostnames target_ips
-    # ... (Target fetching loop - keep the robust version from Response #50) ...
-     while [[ -n "$next_url" && "$next_url" != "null" ]]; do
-        http_code=$(curl -s -L -o /dev/null -w '%{http_code}' -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
-        local curl_exit_status=$?
-        if [[ "$curl_exit_status" -ne 0 ]]; then echo "Error: curl command failed fetching targets (exit status ${curl_exit_status})." >&2; return 1; fi
-        if [[ "$http_code" -ne 200 ]]; then
-            response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
-            echo "Error: Failed to fetch targets page (HTTP ${http_code})" >&2; echo "$response_body" | jq '.' 2>/dev/null || echo "$response_body" >&2; return 1;
-        fi
-        response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
-        local results; results=$(echo "$response_body" | jq -c '.results'); if [[ -z "$results" || "$results" == "null" ]]; then echo "Error: No '.results' in target API response." >&2; echo "$response_body" | jq '.' >&2; return 1; fi
-        all_targets_json=$(echo "$all_targets_json $results" | jq -c -s 'add')
-        next_url=$(echo "$response_body" | jq -r '.next')
-    done
-
-    target_count=$(echo "$all_targets_json" | jq 'length')
-    if [[ "$target_count" -eq 0 ]]; then echo "No targets found."; else
-        mapfile -t target_ids < <(echo "$all_targets_json" | jq -r '.[].id')
-        mapfile -t target_hostnames < <(echo "$all_targets_json" | jq -r '.[].hostname // "N/A"')
-        mapfile -t target_ips < <(echo "$all_targets_json" | jq -r '.[].ip_address // "N/A"')
-        echo "Found ${target_count} targets."
-    fi
-
-    # --- Prompt for Target Selection ---
-    echo "Select Target:"
-    echo "  [0] No Target"
-    for i in "${!target_ids[@]}"; do printf "  [%d] %s (%s)\n" "$((i+1))" "${target_hostnames[i]}" "${target_ips[i]}"; done
-    local target_choice selected_target_id=""
-    while true; do
-        read -p "Enter target number [0-${target_count}]: " target_choice
-        if [[ "$target_choice" =~ ^[0-9]+$ ]] && [[ "$target_choice" -ge 0 ]] && [[ "$target_choice" -le "$target_count" ]]; then
-            if [[ "$target_choice" -ne 0 ]]; then selected_target_id="${target_ids[$((target_choice-1))]}"; fi
-            break
-        else echo "Invalid choice." >&2; fi
-    done
-
-    # --- Get Command via Argument ---
-    # (Using simple argument processing, requires calling like: log2 -c 'command here')
-    local cmda=""
-    local OPTIND # Reset OPTIND for getopts if function is called multiple times in one shell
-    OPTIND=1
-    while getopts ":c:d:" option; do # Added colon for silent errors from getopts
-        case $option in
-            c) cmda=$OPTARG;;
-            d) desc=$OPTARG;;
-            \?) echo "Invalid option: -$OPTARG" >&2; return 1;; # Handle invalid options
-            :) echo "Option -$OPTARG requires an argument." >&2; return 1;; # Handle missing arguments
-        esac
-    done
-    shift $((OPTIND -1)) # Remove processed options
-
-    if [[ -z "$cmda" ]]; then
-        echo "Usage: log -d nmap -c 'your command here'" >&2
-        return 1
-    fi
-
-    # --- Execute Command, Capture Output, Take Screenshot ---
-    local oput file now screenshot_opts
-    echo "Executing command: $cmda"
-    echo """
-
-
-    """
-    # Use script for safer execution and capture
-    oput=$($cmda 2>&1 | tee /dev/tty)
-    echo """
-
-
-    """
-    echo "Command finished. Output captured."
-
-    now=$(TZ=UTC date +%Y%m%d_%H%M%S) # Use UTC for consistency
-    file="/tmp/${now}_${operator}_${desc}.png" # Save screenshot to /tmp
-
-    # Take screenshot only if 'import' command exists
-    if command -v import &> /dev/null; then
-        echo "Taking screenshot (wait 2s)..."
-        sleep 1
-        import -window root "$file" # Capture entire screen, adjust if needed
-        if [[ $? -eq 0 ]]; then
-             screenshot_opts=(-F "screenshot=@$file")
-        else
-             echo "Warning: Screenshot command failed." >&2
-             screenshot_opts=()
-             file="" # Clear filename if screenshot failed
-        fi
-        sleep 1
-    else
-        screenshot_opts=()
-        file="" # No screenshot if command missing
-    fi
-
-    # --- Build and Execute curl POST Command ---
-    echo "--- Submitting Oplog Entry ---"
-    local curl_opts=()
-    # Status code capture options
-    curl_opts+=(-s -L -o /dev/null -w '%{http_code}')
-    curl_opts+=(-X POST)
-    curl_opts+=(-H "${auth_header}") # Token Auth Header
-
-    # Add form fields using -F "key=value"
-    curl_opts+=(-F "command=$cmda") # Correct field name
-    curl_opts+=(-F "output=$oput")
-    curl_opts+=(-F "src_host=$shost")
-    curl_opts+=(-F "src_ip=$sip")
-    curl_opts+=(-F "tool=$tool")
-    # Add target_id only if selected
-    if [[ -n "$selected_target_id" ]]; then
-        curl_opts+=(-F "target_id=$selected_target_id")
-    fi
-    # Add screenshot if taken successfully
-    if [[ -n "$file" && -f "$file" ]]; then
-         curl_opts+=(-F "screenshot=@$file")
-    fi
-    # Add other fields like notes, url if needed via more args or prompts
-
-    # Execute curl for status code
-    local post_http_code
-    post_http_code=$(curl "${curl_opts[@]}" "${oplog_api_url}") # Use correct endpoint URL
-    local post_curl_exit_status=$?
-
-    # --- Handle Response ---
-    local post_response_body=""
-    # Get body if needed
-    if [[ "$post_curl_exit_status" -ne 0 ]]; then
-         echo "Error: curl command failed submitting oplog (exit status ${post_curl_exit_status}). Could not connect?" >&2
-         # Optionally try getting body/error message even on curl failure
-          body_curl_opts=("${curl_opts[@]/-s /}") # Attempt without silent
-          body_curl_opts=("${body_curl_opts[@]/-o \/dev\/null /}")
-          body_curl_opts=("${body_curl_opts[@]/-w '%{http_code}'/}")
-          post_response_body=$(curl "${body_curl_opts[@]}" "${oplog_api_url}" 2>&1)
-          echo "Curl execution error output (if any): $post_response_body" >&2
-         return 1 # Indicate failure
-    elif [[ "$post_http_code" -eq 201 ]]; then # 201 Created
-         body_curl_opts=("${curl_opts[@]/-s /}")
-         body_curl_opts=("${body_curl_opts[@]/-o \/dev\/null /}")
-         body_curl_opts=("${body_curl_opts[@]/-w '%{http_code}'/}")
-         post_response_body=$(curl "${body_curl_opts[@]}" "${oplog_api_url}")
-         echo "Oplog entry created"
-    else # Handle non-201 server responses (like 400, 403, 500)
-         body_curl_opts=("${curl_opts[@]/-s /}")
-         body_curl_opts=("${body_curl_opts[@]/-o \/dev\/null /}")
-         body_curl_opts=("${body_curl_opts[@]/-w '%{http_code}'/}")
-         post_response_body=$(curl "${body_curl_opts[@]}" "${oplog_api_url}")
-         echo "Error: Failed to create oplog entry (HTTP ${post_http_code})." >&2
-         echo "Response Body:" >&2
-         echo "$post_response_body" | jq '.' 2>/dev/null || echo "$post_response_body" >&2
-         return 1 # Indicate failure
-    fi
-
-    # Optional: Clean up temporary screenshot
-    if [[ -n "$file" && -f "$file" ]]; then
-        rm "$file"
-    fi
-
-    return 0
-}
-
 _edc_api_request() {
     local method="$1"
     local url="$2"
@@ -388,6 +192,184 @@ _edc_api_request() {
     fi
 }
 
+function log {
+    # Assume 'operator' variable is set correctly in your environment
+    if [[ -z "$operator" ]]; then echo "Warning: 'operator' not set, using 'unknown'." >&2; operator="unknown"; fi
+    local sip; if command -v my_ip &> /dev/null; then sip=$(my_ip); else echo "Warning: my_ip not found." >&2; sip="127.0.0.1"; fi
+    local shost; shost=$(hostname)
+    local tool="terminal"
+
+    # --- Config Checks ---
+    if [[ -z "$EDC_API_URL" ]]; then echo "Error: EDC_API_URL not set." >&2; return 1; fi
+    if [[ -z "$EDC_API_TOKEN" ]]; then echo "Error: EDC_API_TOKEN not set." >&2; return 1; fi
+    if [[ $# -lt 1 ]]; then echo "Usage: log -d description -c 'your command here'" >&2; return 1; fi
+    # Add checks for curl, jq, import, tee if desired
+
+    # --- API URLs and Auth ---
+    local base_url="${EDC_API_URL%/}"
+    local target_api_url="${base_url}/collector/api/targets/"
+    local oplog_api_url="${base_url}/collector/api/oplog/"
+    local auth_header="Authorization: Token ${EDC_API_TOKEN}"
+
+    # --- Fetch Targets ---
+    echo "Fetching targets from API..."
+    local all_targets_json="[]" next_url="${target_api_url}" http_code response_body
+    local target_count target_ids target_hostnames target_ips
+    while [[ -n "$next_url" && "$next_url" != "null" ]]; do
+        http_code=$(curl -s -L -o /dev/null -w '%{http_code}' -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
+        local curl_exit_status=$?; if [[ "$curl_exit_status" -ne 0 ]]; then echo "Error: curl failed fetching targets (exit ${curl_exit_status})." >&2; return 1; fi
+        if [[ "$http_code" -ne 200 ]]; then response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}"); echo "Error: Failed targets fetch (HTTP ${http_code})" >&2; echo "$response_body"|jq '.' 2>/dev/null||echo "$response_body" >&2; return 1; fi
+        response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
+        local results; results=$(echo "$response_body" | jq -c '.results'); if [[ -z "$results" || "$results" == "null" ]]; then echo "Error: No '.results' in target API response." >&2; echo "$response_body"|jq '.' >&2; return 1; fi
+        all_targets_json=$(echo "$all_targets_json $results" | jq -c -s 'add')
+        next_url=$(echo "$response_body" | jq -r '.next')
+    done
+    target_count=$(echo "$all_targets_json" | jq 'length')
+    if [[ "$target_count" -eq 0 ]]; then echo "No targets found."; else
+        mapfile -t target_ids < <(echo "$all_targets_json" | jq -r '.[].id'); mapfile -t target_hostnames < <(echo "$all_targets_json" | jq -r '.[].hostname // "N/A"'); mapfile -t target_ips < <(echo "$all_targets_json" | jq -r '.[].ip_address // "N/A"'); echo "Found ${target_count} targets."
+    fi
+
+    # --- Prompt for Target Selection ---
+    echo "Select Target:"; echo "  [0] No Target"; for i in "${!target_ids[@]}"; do printf "  [%d] %s (%s)\n" "$((i+1))" "${target_hostnames[i]}" "${target_ips[i]}"; done
+    local target_choice selected_target_id=""; while true; do read -p "Enter target number [0-${target_count}]: " target_choice; if [[ "$target_choice" =~ ^[0-9]+$ && "$target_choice" -ge 0 && "$target_choice" -le "$target_count" ]]; then if [[ "$target_choice" -ne 0 ]]; then selected_target_id="${target_ids[$((target_choice-1))]}"; fi; break; else echo "Invalid choice." >&2; fi; done
+
+    # --- Get Command via Argument ---
+    local cmda="" desc="" # Added desc for getopts
+    local OPTIND=1; while getopts ":c:d:" option; do case $option in c) cmda=$OPTARG;; d) desc=$OPTARG;; \?) echo "Invalid option: -$OPTARG" >&2; return 1;; :) echo "Option -$OPTARG requires arg." >&2; return 1;; esac; done; shift $((OPTIND -1))
+    if [[ -z "$cmda" ]]; then echo "Usage: log -c 'command' [-d 'description']" >&2; return 1; fi
+
+    # --- Execute Command, Capture Output, Take Screenshot ---
+    local oput file now screenshot_opts
+    echo """
+
+
+    """
+    echo "--- Executing Command ---"; echo ">>> ${cmda}"; echo "--- Output ---"
+    oput=$($cmda 2>&1 | tee /dev/tty) # Display live output
+    echo; echo "--- Command Finished ---" # Add newline for clarity
+    echo "${cmda}"
+    echo """
+
+
+    """
+
+    now=$(TZ=UTC date +%Y%m%d_%H%M%S); file="/tmp/${now}_${operator}_${desc}.png"
+    screenshot_opts=(); if command -v import &> /dev/null; then echo "Taking screenshot (wait 1s)..."; sleep 1; import -window root "$file"; if [[ $? -eq 0 ]]; then echo "Done"; else echo "Warning: Screenshot failed." >&2; file=""; fi; else file=""; fi
+
+    # --- Build and Execute curl POST Command (SINGLE CALL) ---
+    echo "--- Submitting Oplog Entry ---"
+    local curl_opts=(); local combined_output; local post_http_code; local post_response_body;
+    curl_opts+=(-s -L) # Silent, follow redirects
+    curl_opts+=(-X POST)
+    curl_opts+=(-H "${auth_header}") # Token Auth Header
+    # Add form fields
+    curl_opts+=(-F "command=$cmda")
+    curl_opts+=(-F "output=$oput")
+    curl_opts+=(-F "src_host=$shost")
+    curl_opts+=(-F "src_ip=$sip")
+    curl_opts+=(-F "tool=$tool")
+    # Add target_id if selected
+    if [[ -n "$selected_target_id" ]]; then curl_opts+=(-F "target_id=$selected_target_id"); fi
+    # Add screenshot if taken successfully
+    if [[ -n "$file" && -f "$file" ]]; then curl_opts+=(-F "screenshot=@$file"); fi
+    # Add option to output status code after body
+    curl_opts+=(-w '\n%{http_code}')
+
+    # Execute curl ONCE capturing combined output
+    combined_output=$(curl "${curl_opts[@]}" "${oplog_api_url}")
+    local post_curl_exit_status=$?
+
+     # --- Process combined output ---
+    if [[ "$post_curl_exit_status" -ne 0 ]]; then
+        echo "Error: curl command failed submitting oplog (exit status ${post_curl_exit_status}). Could not connect?" >&2
+        echo "Curl execution error output (if any): $combined_output" >&2
+        if [[ -n "$file" && -f "$file" ]]; then rm "$file"; fi # Cleanup screenshot on error
+        return 1
+    fi
+    # Separate body and status code
+    if [[ "$combined_output" == *$'\n'* ]]; then post_http_code="${combined_output##*$'\n'}"; post_response_body="${combined_output%$'\n'*}"; else post_http_code="$combined_output"; post_response_body=""; fi
+    if ! [[ "$post_http_code" =~ ^[0-9]+$ ]]; then echo "Error: Failed to parse HTTP status code." >&2; echo "Full Output: $combined_output" >&2; if [[ -n "$file" && -f "$file" ]]; then rm "$file"; fi; return 1; fi
+
+    # --- Handle Response based on HTTP Code ---
+    if [[ "$post_http_code" -eq 201 ]]; then # 201 Created
+        echo "Oplog entry created"
+    else # Handle non-201 server responses
+        echo "Error: Failed to create oplog entry (HTTP ${post_http_code})." >&2
+        echo "Response Body:" >&2
+        echo "$post_response_body" | jq '.' 2>/dev/null || echo "$post_response_body" >&2
+        if [[ -n "$file" && -f "$file" ]]; then rm "$file"; fi # Cleanup on failure too
+        return 1 # Indicate failure
+    fi
+
+    # Optional: Clean up temporary screenshot on success
+    if [[ -n "$file" && -f "$file" ]]; then
+        rm "$file"
+    fi
+    return 0
+}
+
+# Helper function for usage
+log_help() {
+    echo "Usage: log -d sst_description -c 'command to execute'"
+    echo "  Logs the command, its output, and takes/uploads a screenshot."
+}
+
+function cred {
+    local username="" password="" service="" notes=""
+    local OPTIND OPTARG # Reset OPTIND for getopts
+    OPTIND=1
+
+    while getopts ":u:p:s:n:h" option; do
+        case $option in
+            u) username=$OPTARG;;
+            p) password=$OPTARG;;
+            s) service=$OPTARG;;
+            n) notes=$OPTARG;;
+            h) cred_usage; return 0;;
+            \?) echo "Invalid option: -$OPTARG" >&2; cred_usage; return 1;;
+            :) echo "Option -$OPTARG requires an argument." >&2; cred_usage; return 1;;
+        esac
+    done
+    shift $((OPTIND -1))
+
+    # Check required arguments
+    if [[ -z "$username" ]] || [[ -z "$password" ]]; then
+        echo "Error: Username (-u) and Password (-p) are required." >&2
+        cred_usage
+        return 1
+    fi
+
+    # Config Checks
+    if [[ -z "$EDC_API_URL" ]]; then echo "Error: EDC_API_URL not set." >&2; return 1; fi
+    if [[ -z "$EDC_API_TOKEN" ]]; then echo "Error: EDC_API_TOKEN not set." >&2; return 1; fi
+
+    # Construct JSON Payload using jq
+    local json_payload
+    json_payload=$(jq -n \
+        --arg user "$username" \
+        --arg pass "$password" \
+        --arg svc "$service" \
+        --arg note "$notes" \
+        '{username: $user, password_plaintext: $pass, service: $svc, notes: $note}')
+        # Note: target_id, hash_value, hash_type are omitted, will be null/default
+
+    local base_url="${EDC_API_URL%/}"
+    local cred_api_url="${base_url}/collector/api/credentials/"
+
+    echo "Submitting credential for user '${username}'..."
+
+    # Use helper function for the API request
+    local api_response
+    if api_response=$(_edc_api_request POST "$cred_api_url" "$json_payload"); then
+        # Success output already printed by helper to stderr, print body nicely
+        echo "Credential created successfully. Response:"
+        echo "$api_response" | jq '.'
+        return 0
+    else
+        # Error already printed by helper to stderr
+        return 1
+    fi
+}
 
 function cred {
     local username="" password="" service="" notes=""
