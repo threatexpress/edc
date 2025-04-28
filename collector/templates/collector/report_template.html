@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% load static %}
+    <title>{{ report_title|default:"Findings Report" }}</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/base.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/forms.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/reports.css' %}">
+    <style>
+        /* --- Combined CSS Styles --- */
+        body { padding: 20px; font-family: sans-serif; background-color: #fefefe; color: #333; }
+        h1 { color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 10px; margin-bottom: 10px; font-size: 1.8em;}
+        h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 30px; margin-bottom: 15px; font-size: 1.4em;}
+        table { border-collapse: collapse; width: 100%; margin-bottom: 30px; border: 1px solid #ccc; font-size: 0.9em; background-color: #fff;}
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f2f2f2; font-weight: bold;}
+        caption { caption-side: bottom; text-align: center; margin-top: 5px; font-style: italic; color: #555; font-size: 0.9em;}
+        .label-col { width: 25%; font-weight: bold; background-color: #f9f9f9;}
+        .data-col { width: 75%; }
+        .placeholder { color: #888; font-style: italic; }
+        .codeblock {
+            background-color: #f5f5f5; border: 1px solid #ddd; padding: 10px;
+            margin: 5px 0; white-space: pre-wrap; word-wrap: break-word;
+            font-family: monospace; display: block; max-height: 300px; overflow-y: auto;
+            font-size: 0.9em; color: #333;
+        }
+        .screenshot { max-width: 100%; height: auto; max-height: 400px; display: block; margin-top: 10px; border: 1px solid #ccc; }
+        .poc-entry { border-bottom: 1px dashed #eee; margin-bottom: 15px; padding-bottom: 15px; }
+        .poc-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .poc-entry p { margin: 5px 0; }
+        .poc-entry strong { color: #444; }
+        .summary-table th, .summary-table td { width: 33%; }
+        .action-button {
+            background: #79aec8; padding: 8px 12px; border: none; border-radius: 4px;
+            color: white; text-decoration: none; font-weight: bold; cursor: pointer;
+            display: inline-block; margin-bottom: 5px; font-size: 0.9em;
+        }
+        .action-button:hover { background: #609ab6; }
+        .controls-section { background-color: #f8f8f8; border: 1px solid #eee; padding: 15px; margin-bottom: 20px; border-radius: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 15px;}
+        .controls-section label { margin-right: 5px; font-weight: bold;}
+        .controls-section select, .controls-section button { padding: 5px 8px; margin-right: 10px;}
+        .priority-selector-row td { background-color: #eef; } /* Light blue background */
+        .priority-selector-row select { margin-left: 10px; padding: 3px;}
+        .back-link { margin-bottom: 15px; display: block; color: #447e9b; text-decoration: none; font-size: 0.9em; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <p><a href="{% url 'admin:index' %}" class="back-link">&larr; Back to Admin Home</a></p>
+
+    <h1>{{ report_title|default:"Findings Report" }}</h1>
+    <p>Report Generated: {{ report_date }}</p>
+
+    {# --- Form only needed for CSRF token --- #}
+    <form id="reportControlForm" method="POST" action="">{# Action no longer used by JS #}
+        {% csrf_token %}
+        {# Hidden inputs removed, data constructed in JS #}
+
+        <div class="controls-section">
+            {# --- Classification Selector (NO inner form) --- #}
+            <div>
+                <label for="classification-select">Classification:</label>
+                <select name="classification" id="classification-select" onchange="handleClassificationChange(this)">
+                    {% for choice in classification_choices %}
+                        <option value="{{ choice }}" {% if choice == selected_classification %}selected{% endif %}>
+                            {{ choice }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# --- Export button --- #}
+            <div>
+                <button type="button" id="exportToWordButton" class="action-button">Export to Word (.docx)</button>
+                <span class="placeholder" style="margin-left: 10px;">(Current Level: <span id="currentClassificationDisplay">{{ selected_classification }}</span>)</span>
+            </div>
+        </div>
+        {# --- This form tag only needs to wrap the CSRF token technically --- #}
+        {# --- The button click is fully handled by JS below          --- #}
+    </form>
+    {# --- End Controls Section / Form --- #}
+
+
+    {% if not report_findings %}
+        <p>No findings data available based on current Oplog entries.</p>
+    {% endif %}
+
+    {# --- Loop through each Finding --- #}
+    {% for finding_data in report_findings %}
+        <h2>Finding {{ forloop.counter }}: {{ finding_data.finding_title }}</h2>
+        <table>
+             <caption>Finding {{ forloop.counter }}: {{ finding_data.finding_title }}</caption>
+            <tbody>
+                {# --- ADD Priority Selector Row --- #}
+                <tr class="priority-selector-row">
+                    <td class="label-col">Set Mitigation Priority</td>
+                    <td class="data-col">
+                        {# Use finding title in data attribute for JS retrieval #}
+                        <select class="priority-select" data-finding-title="{{ finding_data.finding_title }}">
+                             {% for choice in priority_choices %}
+                                {# Default to the specified default #}
+                                <option value="{{ choice }}" {% if choice == default_priority %}selected{% endif %}>
+                                     {{ choice }}
+                                 </option>
+                             {% endfor %}
+                        </select>
+                    </td>
+                </tr>
+                {# --- End Priority Selector Row --- #}
+
+                {# --- Standard Finding Details Rows --- #}
+                <tr><td class="label-col">Finding Reference</td><td class="data-col">{{ finding_data.finding_title }}</td></tr>
+                <tr><td class="label-col">Description</td><td class="data-col"><span class="placeholder">[User to provide detailed description of the finding and its context]</span></td></tr>
+                <tr><td class="label-col">Affected Resources</td><td class="data-col">{% if finding_data.targets %}{{ finding_data.targets|join:", " }}{% else %}N/A{% endif %}</td></tr>
+                <tr><td class="label-col">Operational Impact</td><td class="data-col"><span class="placeholder">[User to describe the operational impact if exploited]</span></td></tr>
+                <tr><td class="label-col">Threat Posture</td><td class="data-col"><span class="placeholder">[User to describe threat posture, likelihood, actor TTPs]</span></td></tr>
+                <tr>
+                    <td class="label-col">Mitigation(s)</td>
+                    <td class="data-col">
+                        {% for mitigation in finding_data.mitigations %}
+                            <p>
+                                <a href="{% url 'admin:collector_mitigation_change' mitigation.pk %}" target="_blank"><strong>{{ mitigation.name }}</strong></a><br>
+                                {{ mitigation.description }}
+                            </p>
+                        {% empty %}
+                            N/A
+                        {% endfor %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label-col">Control Correlation Identifier (CCI)</td>
+                     <td class="data-col">
+                        {% if finding_data.ccis %}
+                            {{ finding_data.ccis|join:", " }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr><td class="label-col">CVSS Score</td><td class="data-col"><span class="placeholder">[User to provide CVSS Score and Vector]</span></td></tr>
+                <tr><td colspan="2" style="text-align: center; background-color: #f2f2f2;"><strong>Proof of Concept</strong></td></tr>
+                <tr>
+                    <td colspan="2" style="padding: 15px;">
+                        {% for detail in finding_data.oplog_details %}
+                            <div class="poc-entry">
+                                <p><strong>Entry <a href="{{ detail.admin_change_url }}" target="_blank">{{ detail.id }}</a> ({{ detail.timestamp|date:"Y-m-d H:i" }} by {{ detail.operator }}):</strong></p>
+                                {% if detail.url and detail.url != "N/A" %}<p><strong>URL:</strong> <a href="{{ detail.url }}" target="_blank">{{ detail.url }}</a></p>{% endif %}
+                                {% if detail.notes and detail.notes != "N/A" %}<p><strong>Notes:</strong><br>{{ detail.notes|linebreaksbr }}</p>{% endif %}
+                                {% if detail.command and detail.command != "N/A" %}
+                                    <p><strong>Command:</strong></p>
+                                    <pre class="codeblock"><code>{{ detail.command }}</code></pre>
+                                {% endif %}
+                                 {% if detail.output and detail.output != "N/A" %}
+                                    <p><strong>Output:</strong></p>
+                                    <pre class="codeblock"><code>{{ detail.output }}</code></pre>
+                                {% endif %}
+                                {% if detail.screenshot_url %}
+                                    <p><strong>Screenshot:</strong></p>
+                                    <a href="{{ detail.screenshot_url }}" target="_blank">
+                                        <img src="{{ detail.screenshot_url }}" alt="Screenshot for entry {{ detail.id }}" class="screenshot">
+                                    </a>
+                                {% endif %}
+                            </div>
+                        {% empty %}
+                             <p>No specific Oplog entry details linked to this finding.</p>
+                        {% endfor %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    {% endfor %} {# End finding loop #}
+
+
+    {# --- Summary Table --- #}
+    {% if summary_table_data %}
+       <h2>Mitigation Priorities Summary</h2>
+        <table class="summary-table">
+             <caption>Mitigation Priorities Summary</caption>
+            <thead>
+                <tr>
+                    <th>Finding</th>
+                    <th>Mitigation Priority</th>
+                    <th>Mitigation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for finding_title, mitigation_name in summary_table_data %} {# Unpack tuple #}
+                <tr>
+                    <td>{{ finding_title }}</td>
+                    <td><span class="placeholder">[Set Priority]</span></td> {# This table shows finding/mitigation pairs; priority shown per finding above #}
+                    <td>{{ mitigation_name }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3">No findings or mitigations identified.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {# --- JavaScript for Controls using Fetch --- #}
+    <script>
+        // Function to handle classification change and reload page with GET parameter
+        function handleClassificationChange(selectElement) {
+            const selectedValue = selectElement.value;
+            const currentUrl = window.location.pathname; // Gets '/collector/report/findings/'
+            // Construct new URL preserving only the classification parameter
+            window.location.href = `${currentUrl}?classification=${encodeURIComponent(selectedValue)}`;
+        }
+
+        // Event listener for the export button
+        document.getElementById('exportToWordButton').addEventListener('click', function(event) {
+            event.preventDefault(); // Stop default button behavior
+
+            // 1. Get selected classification (read directly from dropdown)
+            const classificationSelect = document.getElementById('classification-select');
+            const selectedClassification = classificationSelect ? classificationSelect.value : '{{ selected_classification|escapejs }}'; // Fallback to value from context
+
+            // 2. Get selected priorities for each finding
+            const prioritySelects = document.querySelectorAll('.priority-select');
+            const prioritiesMap = {};
+            prioritySelects.forEach(select => {
+                const findingTitle = select.dataset.findingTitle;
+                if (findingTitle) {
+                    prioritiesMap[findingTitle] = select.value;
+                } else {
+                    console.warn("Priority select missing data-finding-title attribute:", select);
+                }
+            });
+
+            // 3. Get CSRF token (essential for POST requests)
+            // Ensure the form tag exists and has the CSRF token input
+            const csrfTokenInput = document.querySelector('#reportControlForm input[name="csrfmiddlewaretoken"]');
+            if (!csrfTokenInput) {
+                console.error("CSRF Token input not found!");
+                alert("Error: CSRF Token not found. Cannot submit export request.");
+                return; // Stop if CSRF token is missing
+            }
+            const csrfToken = csrfTokenInput.value;
+
+
+            // 4. Prepare data using FormData
+            const formData = new FormData();
+            formData.append('classification', selectedClassification);
+            formData.append('priorities', JSON.stringify(prioritiesMap));
+            // We send CSRF via header, not usually needed in FormData body for fetch
+
+            // 5. Define the target URL explicitly using Django's url tag
+            const exportUrl = "{% url 'collector:finding-report-export-docx' %}";
+
+            console.log("Attempting fetch POST to:", exportUrl);
+            console.log("Submitting classification:", selectedClassification);
+            console.log("Submitting priorities JSON:", JSON.stringify(prioritiesMap));
+
+            // 6. Perform the fetch request
+            fetch(exportUrl, {
+                method: 'POST',
+                headers: {
+                    // Django requires this header for CSRF validation with fetch/AJAX
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData // Send data as FormData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Attempt to get server error message for better debugging
+                    return response.text().then(text => {
+                        throw new Error(`HTTP error ${response.status}: ${text || response.statusText}`);
+                    });
+                }
+                // Get filename from Content-Disposition header
+                const disposition = response.headers.get('content-disposition');
+                let filename = 'findings_report.docx'; // Default
+                if (disposition && disposition.includes('attachment')) {
+                     const filenameMatch = disposition.match(/filename\*?=['"]?([^'";]+)['"]?/);
+                     if (filenameMatch && filenameMatch[1]) {
+                        // Decode URI component for potential % encoding, then replace simple quotes
+                        filename = decodeURIComponent(filenameMatch[1]).replace(/['"]/g, '');
+                     } else {
+                         // Fallback for simpler filename="filename.ext"
+                         const simpleMatch = disposition.match(/filename="?([^"]+)"?/);
+                         if(simpleMatch && simpleMatch[1]) {
+                              filename = simpleMatch[1].replace(/['"]/g, '');
+                         }
+                    }
+                }
+                console.log("Received successful response, attempting blob download. Filename:", filename);
+                return response.blob().then(blob => ({ blob, filename })); // Pass blob and filename down
+            })
+            .then(({ blob, filename }) => {
+                // Create a temporary link to trigger the download
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename; // Use filename from header or default
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url); // Clean up the object URL
+                document.body.removeChild(a); // Clean up the link element
+                console.log("Download triggered.");
+            })
+            .catch(error => {
+                console.error('Export error:', error);
+                // Display a more informative error to the user
+                alert('Error exporting report:\n' + error);
+            });
+        });
+
+    </script>
+    {# --- End JavaScript --- #}
+
+</body>
+</html>

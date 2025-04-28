@@ -1,7 +1,7 @@
 # collector/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import OplogEntry, Target, Credential, Payload, EnumerationData
+from .models import OplogEntry, Target, Credential, Payload, EnumerationData, Mitigation
 
 User = get_user_model()
 
@@ -34,7 +34,8 @@ class OplogEntrySerializer(serializers.ModelSerializer):
             'notes',
             'screenshot',
             'enum',
-            'exfil_files', # Read-only list of related PKs or nested serializer
+            #'exfil_files', # Read-only list of related PKs or nested serializer
+            #'mitigations__name',
         ]
         # Make timestamp read-only as it's auto-set
         read_only_fields = ['timestamp'] # Operator is read_only via field definition

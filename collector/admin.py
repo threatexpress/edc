@@ -10,7 +10,7 @@ from rest_framework.authtoken.admin import TokenAdmin
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.models import TokenProxy
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile
+from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile, Mitigation, Note
 
 class TokenInline(admin.StackedInline):
     model = TokenProxy # Use TokenProxy here
@@ -44,11 +44,17 @@ class TargetAdmin(admin.ModelAdmin):
         models.TextField: {'widget': Textarea(attrs={'rows':2})},
     }
 
+@admin.register(Mitigation)
+class MitigationAdmin(admin.ModelAdmin):
+    list_display = ('name', 'finding', 'reference', 'category', 'description')
+    search_fields = ('name', 'finding', 'reference', 'description', 'category')
+    list_filter = ('category',)
+
 @admin.register(OplogEntry)
 class OplogEntryAdmin(admin.ModelAdmin):
     #list_display = ('__str__', 'target', 'command', 'timestamp')
-    list_display = ('timestamp', 'target', 'src_ip', 'command', 'output', 'tool', 'notes','screenshot', 'enum', 'view_enum_link', 'operator__username')
-    search_fields = ('operator__username', 'target__hostname', 'target__ip_address', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url')
+    list_display = ('timestamp', 'target', 'src_ip', 'command', 'tool', 'notes','screenshot', 'enum', 'view_enum_link', 'mitigations__name', 'operator__username')
+    search_fields = ('operator__username', 'target__hostname', 'target__ip_address', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url', 'mitigations__name')
     list_filter = ('timestamp', 'operator', 'target')
     # Make operator field read-only after creation (usually set automatically)
     readonly_fields = ('timestamp', 'view_enum_link')
@@ -56,6 +62,10 @@ class OplogEntryAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': ('operator', 'target', 'timestamp', 'dst_port', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url')
+        }),
+        ('Mitigations / Tags', {
+            'classes': ('collapse',), # Start collapsed
+            'fields': ('mitigations',),
         }),
         ('Associated Single Files (Optional)', {
             'classes': ('collapse',),
@@ -65,6 +75,8 @@ class OplogEntryAdmin(admin.ModelAdmin):
 
     # Add the ExfilFile inline
     inlines = [ExfilFileInline, ]
+
+    filter_horizontal = ('mitigations',) # Or filter_vertical = ('mitigations',)
 
     def view_enum_link(self, obj):
         if obj.enum:
@@ -119,6 +131,7 @@ class CredentialAdmin(admin.ModelAdmin):
         if not obj.pk:
             obj.operator = request.user
         super().save_model(request, obj, form, change)
+    # For updates or security concerns contact JTubb @minis.io
 
 @admin.register(EnumerationData)
 class EnumerationDataAdmin(admin.ModelAdmin):
@@ -178,3 +191,23 @@ class PayloadAdmin(admin.ModelAdmin):
         if not obj.pk:
             obj.operator = request.user
         super().save_model(request, obj, form, change)
+
+@admin.register(Note)
+class NoteAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'content')
+    list_filter = ('category', 'operator', 'content', 'updated_at')
+    search_fields = ('title', 'content', 'category', 'operator__username')
+    # Define fields shown on add/change form
+    fields = ('title', 'category', 'content', 'operator')
+    readonly_fields = ('created_at', 'updated_at') # Keep timestamps read-only
+
+    # Pre-populate or auto-set operator (choose one method)
+    def get_changeform_initial_data(self, request):
+        return {'operator': request.user.pk}
+
+    formfield_overrides = {
+         models.TextField: {'widget': Textarea(attrs={'rows':15, 'cols':80})},
+         models.CharField: {'widget': TextInput(attrs={'size':'60'})},
+         models.GenericIPAddressField: {'widget': TextInput(attrs={'size':'20'})},
+     }
+

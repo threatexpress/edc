@@ -11,7 +11,8 @@
 {# {% block sidebar %}
     {{ block.super }}
     <div style="margin-top: 15px;">
-        <h3>{% translate 'Actions' %}</h3>
+        <h2>{% translate 'Reporting & Export' %}</h2>
+        <a href="{% url 'collector:finding-report' %}" class="button">{% translate 'Findings Report' %}</a>
         <a href="{% url 'export-all-zip' %}" class="button">{% translate 'Export All Files (Zip)' %}</a>
         <a href="{% url 'download-db' %}" class="button" style="margin-left: 10px;">{% translate 'Download DB (SQLite)' %}</a>
     </div>

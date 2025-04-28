@@ -80,6 +80,7 @@ class Credential(models.Model):
     #   3. Implement strict access controls regardless.
     password_plaintext = models.TextField(blank=True, null=True, verbose_name="Password/Secret (Plaintext - WARNING!)")
     # !!! --- END SECURITY WARNING --- !!!
+    # !!! --- For updates or security concerns contact James Tubberville --- !!!
 
     hash_value = models.TextField(blank=True, null=True, verbose_name="Hash Value")
     hash_type = models.CharField(max_length=50, blank=True, null=True, verbose_name="Hash Type", help_text="e.g., NTLM, NetNTLMv1/v2, Kerberos, bcrypt")
@@ -128,6 +129,22 @@ def get_enum_data_path(instance, filename):
     # Construct the path
     return os.path.join('targets', target_identifier, 'enum_data', filename)
 
+class Mitigation(models.Model):
+    """ Represents a predefined security mitigation or recommendation. """
+    name = models.CharField(max_length=100, unique=True, help_text="Short unique name/ID (e.g., M1, Disable Outdated Service SMBv1)")
+    finding = models.CharField(max_length=100, blank=True, help_text="Short unique name/ID (e.g., Insecure Protocols or Services)")
+    description = models.TextField(help_text="Detailed description of the mitigation.")
+    category = models.CharField(max_length=50, blank=True, help_text="Optional category (e.g., Network, Host, Policy, IAM)")
+    reference = models.TextField(max_length=500, blank=True, help_text="Optional URL to external documentation.")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Mitigation"
+        verbose_name_plural = "Mitigations"
+        ordering = ['name']
+
 class OplogEntry(models.Model):
     """Represents a single operator log entry."""
     operator = models.ForeignKey(
@@ -158,6 +175,13 @@ class OplogEntry(models.Model):
     sys_mod = models.TextField(blank=True, null=True, verbose_name="System Modification")
     #exfil = models.FileField(upload_to=get_oplog_exfil_path, blank=True, null=True) # For file uploads
     enum = models.FileField(upload_to=get_enum_data_path, blank=True, null=True) # For file uploads
+
+    mitigations = models.ManyToManyField(
+        Mitigation,
+        blank=True, # Tagging is optional
+        related_name='oplog_entries',
+        verbose_name="Associated Mitigations"
+    )
 
     def __str__(self):
         return f"OpLog {self.id} by {self.operator.username} at {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
@@ -323,3 +347,33 @@ class ExfilFile(models.Model):
         verbose_name = "Exfiltrated File"
         verbose_name_plural = "Exfiltrated Files"
         ordering = ['-uploaded_at']
+
+
+class Note(models.Model):
+    """ Represents a general note, finding, or piece of information. """
+    title = models.CharField(max_length=255, help_text="short title")
+    content = models.TextField(blank=True, help_text="Main content.")
+    category = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Optional category (e.g., Scope, POC, Rules, Findings, TODO)."
+    )
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT, # Keep note even if operator deletes
+        related_name='added_notes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = "Administrative Note"
+        verbose_name_plural = "Administrative Notes"
+        ordering = ['-updated_at', '-created_at'] # Show most recently updated first
+
+
+

@@ -11,14 +11,16 @@ source venv/bin/activate
 pip install django
 pip install Pillow
 pip install djangorestframework
+pip install python-docx
 ```
 
-Initialze the server
+Initialze the server (only if updates are made, otherwise just skip)
 ```
+python manage.py makemigrations collector --empty --name populate_mitigations
 python manage.py makemigrations collector
 python manage.py migrate
 ```
-Create a user if required
+Create a user if required (should not be required)
 ```
 python manage.py createsuperuser
 
@@ -26,7 +28,7 @@ python manage.py createsuperuser
 
 Start the server
 ```
-python manage.py runserver
+python manage.py runserver 0.0.0.0:8000
 ```
 
 ### API
@@ -111,9 +113,8 @@ curl -X POST http://127.0.0.1:8000/collector/api/oplog/ \
 - http://127.0.0.1:8000/collector/api/enumdata/
 
 #### GET via SESSION
-```
 # Replace cookie values with ones from your browser's developer tools after logging in
-
+```
 curl -X GET http://127.0.0.1:8000/collector/api/oplog/ \
      -H 'Accept: application/json' \
      -H 'Cookie: sessionid=YOUR_SESSION_ID; csrftoken=YOUR_CSRF_TOKEN' \
@@ -135,7 +136,6 @@ curl -X POST http://127.0.0.1:8000/collector/api/oplog/ \
            "target_id": 1
          }'
 ```
----
 
 # If starting a new project. CAUTION: This reinitializes files
 ```
@@ -145,3 +145,4 @@ python manage.py makemigrations collector
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+```

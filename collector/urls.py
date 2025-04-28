@@ -43,4 +43,8 @@ urlpatterns = [
     path('api/credentials/', views.CredentialListCreateAPIView.as_view(), name='api-credential-list-create'),
     path('api/payloads/', views.PayloadListCreateAPIView.as_view(), name='api-payload-list-create'),
     path('api/enumdata/', views.EnumerationDataListCreateAPIView.as_view(), name='api-enumdata-list-create'),
+
+    # Report URL
+    path('report/findings/', views.finding_report_view, name='finding-report'),
+    path('report/findings/export/docx/', views.finding_report_export_docx, name='finding-report-export-docx'),
 ]

@@ -1,1 +1,0 @@
-django_tables2
