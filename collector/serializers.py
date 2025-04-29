@@ -53,13 +53,12 @@ class CredentialSerializer(serializers.ModelSerializer):
         queryset=Target.objects.all(), source='target', write_only=True, required=False, allow_null=True
     )
     # Make password write-only for security via API
-    password_plaintext = serializers.CharField(write_only=True, required=False, allow_blank=True, style={'input_type': 'password'})
+    password_plaintext = serializers.CharField(write_only=False, required=False, allow_blank=True, style={'input_type': 'password'})
 
     class Meta:
         model = Credential
         fields = [
-            'id', 'target', 'target_id', 'service', 'username',
-            'password_plaintext', # Write-only
+            'id', 'target', 'target_id', 'service', 'username', 'password_plaintext', # Write-only
             'hash_value', 'hash_type', 'notes', 'operator', 'created_at', 'updated_at'
             ]
         read_only_fields = ['operator', 'created_at', 'updated_at']
