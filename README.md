@@ -30,6 +30,7 @@ Start the server
 ```
 python manage.py runserver 0.0.0.0:8000
 ```
+Note: DEBUG is set to True. When deploying on an open or connected network, set to False
 
 ### API
 ```
