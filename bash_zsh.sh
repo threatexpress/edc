@@ -499,3 +499,167 @@ log_help() {
     echo "    -d DESCRIPTION : Simple screenshot description for the log entry."
     echo "  Requires EDC_API_URL and EDC_API_TOKEN environment variables."
 }
+
+# ==============================================================================
+# Function to add or list Enumeration Data
+# Usage: enum -l | enum [-t <type>] [-d <desc>] [-n <notes>] [-f <filepath>] [-h]
+#        Add mode will prompt for target selection.
+# ==============================================================================
+function enum {
+    local scan_type="" desc="" notes="" scan_file_path="" list_mode=false
+    local target_choice selected_target_id="" # For target selection
+    local OPTIND OPTARG
+    OPTIND=1
+
+    # Add 'l' and flags for add mode
+    while getopts ":lt:d:n:f:h" option; do
+        case $option in
+            l) list_mode=true;;
+            t) scan_type=$OPTARG;;
+            d) desc=$OPTARG;;
+            n) notes=$OPTARG;;
+            f) scan_file_path=$OPTARG;;
+            h) enum_usage; return 0;;
+            \?) echo "Invalid option: -$OPTARG" >&2; enum_usage; return 1;;
+            :) echo "Option -$OPTARG requires an argument." >&2; enum_usage; return 1;;
+         esac
+    done
+    shift $((OPTIND -1))
+
+    # --- Config Checks ---
+    if [[ -z "$EDC_API_URL" ]]; then echo "Error: EDC_API_URL not set." >&2; return 1; fi
+    if [[ -z "$EDC_API_TOKEN" ]]; then echo "Error: EDC_API_TOKEN not set." >&2; return 1; fi
+    if ! command -v jq &> /dev/null; then echo "Error: jq not found." >&2; return 1; fi
+    if ! command -v curl &> /dev/null; then echo "Error: curl not found." >&2; return 1; fi
+
+    if [[ "$1" == "-l" ]]; then
+        list_mode=true
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        enum_usage
+        return 1
+    fi
+
+    local base_url="${EDC_API_URL%/}"
+    local enum_api_url="${base_url}/collector/api/enumdata/"
+    local target_api_url="${base_url}/collector/api/targets/" # Needed for target selection
+    local auth_header="Authorization: Token ${EDC_API_TOKEN}"
+
+    # --- List Mode ---
+    if [[ "$list_mode" == true ]]; then
+        # Check if other incompatible args were passed
+        if [[ -n "$scan_type" || -n "$desc" || -n "$notes" || -n "$scan_file_path" ]]; then
+             echo "Error: Cannot use other options with -l (list mode)." >&2
+             enum_usage
+             return 1
+        fi
+        echo "Listing Enumeration Data entries (first page)..."
+        local api_response
+        # Use helper _edc_api_request for GET
+        if api_response=$(_edc_api_request GET "$enum_api_url"); then
+            # Pretty print JSON using jq
+            echo "$api_response" | jq '.'
+            echo ""
+            return 0
+        else
+            # Error already printed by helper
+            return 1
+        fi
+    fi
+
+    # --- Add Mode ---
+    # (No specific fields are required by default other than operator set by API)
+
+    # --- Fetch Targets for Selection (similar to log function) ---
+    echo "Fetching targets from API..."
+    local all_targets_json="[]" next_url="${target_api_url}" http_code response_body
+    local target_count target_ids target_hostnames target_ips
+    while [[ -n "$next_url" && "$next_url" != "null" ]]; do
+        http_code=$(curl -s -L -o /dev/null -w '%{http_code}' -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
+        local curl_exit_status=$?; if [[ "$curl_exit_status" -ne 0 ]]; then echo "Error: curl failed fetching targets (exit ${curl_exit_status})." >&2; return 1; fi
+        if [[ "$http_code" -ne 200 ]]; then response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}"); echo "Error: Failed targets fetch (HTTP ${http_code})" >&2; echo "$response_body"|jq '.' 2>/dev/null||echo "$response_body" >&2; return 1; fi
+        response_body=$(curl -s -L -H "${auth_header}" -H 'Accept: application/json' "${next_url}")
+        local results; results=$(echo "$response_body" | jq -c '.results'); if [[ -z "$results" || "$results" == "null" ]]; then echo "Error: No '.results' in target API response." >&2; echo "$response_body"|jq '.' >&2; return 1; fi
+        all_targets_json=$(echo "$all_targets_json $results" | jq -c -s 'add')
+        next_url=$(echo "$response_body" | jq -r '.next')
+    done
+    target_count=$(echo "$all_targets_json" | jq 'length')
+    if [[ "$target_count" -eq 0 ]]; then echo "No targets found."; else
+        mapfile -t target_ids < <(echo "$all_targets_json" | jq -r '.[].id'); mapfile -t target_hostnames < <(echo "$all_targets_json" | jq -r '.[].hostname // "N/A"'); mapfile -t target_ips < <(echo "$all_targets_json" | jq -r '.[].ip_address // "N/A"'); echo "Found ${target_count} targets."
+    fi
+
+    # --- Prompt for Target Selection ---
+    echo "Select Target to associate enumeration data with:"
+    echo "  [0] No Target"
+    for i in "${!target_ids[@]}"; do printf "  [%d] %s (%s)\n" "$((i+1))" "${target_hostnames[i]}" "${target_ips[i]}"; done
+    selected_target_id="" # Default to empty for form data
+    while true; do read -p "Enter target number [0-${target_count}]: " target_choice; if [[ "$target_choice" =~ ^[0-9]+$ && "$target_choice" -ge 0 && "$target_choice" -le "$target_count" ]]; then if [[ "$target_choice" -ne 0 ]]; then selected_target_id="${target_ids[$((target_choice-1))]}"; fi; break; else echo "Invalid choice." >&2; fi; done
+
+
+    # --- Build and Execute curl POST Command (SINGLE CALL) ---
+    # (Similar to 'log' function as we might upload a file)
+    echo "--- Submitting Enumeration Data Entry ---"
+    local curl_opts=(); local combined_output; local post_http_code; local post_response_body;
+    curl_opts+=(-s -L) # Silent, follow redirects
+    curl_opts+=(-X POST)
+    curl_opts+=(-H "${auth_header}") # Token Auth Header
+    # DO NOT set Content-Type, let curl handle multipart/form-data
+
+    # Add optional form fields if provided
+    if [[ -n "$scan_type" ]]; then curl_opts+=(-F "scan_type=$scan_type"); fi
+    if [[ -n "$desc" ]]; then curl_opts+=(-F "description=$desc"); fi
+    if [[ -n "$notes" ]]; then curl_opts+=(-F "notes=$notes"); fi
+    if [[ -n "$selected_target_id" ]]; then curl_opts+=(-F "target_id=$selected_target_id"); fi
+
+    # Add scan file if path provided and file exists
+    if [[ -n "$scan_file_path" ]]; then
+        if [[ -f "$scan_file_path" ]]; then
+            echo "  Attaching scan file: $scan_file_path"
+            curl_opts+=(-F "scan_file=@$scan_file_path")
+        else
+            echo "Warning: Scan file path '$scan_file_path' not found. Skipping file upload." >&2
+        fi
+    fi
+
+    # Add option to output status code after body
+    curl_opts+=(-w '\n%{http_code}')
+
+    # Execute curl ONCE capturing combined output
+    combined_output=$(curl "${curl_opts[@]}" "${enum_api_url}")
+    post_curl_exit_status=$?
+
+     # --- Process combined output ---
+    if [[ "$post_curl_exit_status" -ne 0 ]]; then echo "Error: curl command failed submitting enum data (exit status ${post_curl_exit_status})." >&2; echo "Curl output: $combined_output" >&2; return 1; fi
+    if [[ "$combined_output" == *$'\n'* ]]; then post_http_code="${combined_output##*$'\n'}"; post_response_body="${combined_output%$'\n'*}"; else post_http_code="$combined_output"; post_response_body=""; fi
+    if ! [[ "$post_http_code" =~ ^[0-9]+$ ]]; then echo "Error: Failed to parse HTTP status code." >&2; echo "Full Output: $combined_output" >&2; return 1; fi
+
+    # --- Handle Response ---
+    if [[ "$post_http_code" -eq 201 ]]; then # 201 Created
+        echo "Success! Enumeration data entry created (HTTP ${post_http_code})."
+        echo "Response:"
+        echo "$post_response_body" | jq '.'
+    else # Handle non-201 server responses
+        echo "Error: Failed to create enumeration data entry (HTTP ${post_http_code})." >&2
+        echo "Response Body:" >&2
+        echo "$post_response_body" | jq '.' 2>/dev/null || echo "$post_response_body" >&2
+        return 1 # Indicate failure
+    fi
+    return 0
+}
+
+
+# Helper function for enum usage
+enum_usage() {
+    echo "Usage: enum -l | enum [-t <type>] [-d <desc>] [-n <notes>] [-f <filepath>] [-h]"
+    echo "  Adds or lists Enumeration Data entries via the EDC API."
+    echo "  Add mode will prompt for target selection."
+    echo "  Options:"
+    echo "    -l          : List existing enum data entries (shows first page)."
+    echo "    -t TYPE     : Type of scan/enum (optional, e.g., Nmap, Nessus)."
+    echo "    -d DESC     : Brief description (optional). Quote if needed."
+    echo "    -n NOTES    : Detailed notes (optional). Quote if needed."
+    echo "    -f FILEPATH : Path to a local scan file to upload (optional)."
+    echo "    -h          : Display this help message."
+    echo "  Requires EDC_API_URL and EDC_API_TOKEN environment variables."
+}
