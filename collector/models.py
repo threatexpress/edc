@@ -2,6 +2,9 @@ import os
 import re
 from django.db import models
 from django.conf import settings # To link to the User model
+from django.db.models.fields import CharField, TextField
+from collector.utils import sanitize_string
+from collector.utils import strip_non_printable
 
 def get_target_identifier(target_obj):
     """ Helper function to get sanitized identifier from a Target object """
@@ -34,7 +37,7 @@ def get_oplog_exfil_path(instance, filename):
 class Target(models.Model):
     """Represents a target system or asset."""
     #ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="IP Address")
-    ip_address = models.TextField(blank=True, null=True, verbose_name="IP Address")
+    ip_address = models.TextField(blank=False, null=False, verbose_name="IP Address")
     hostname = models.CharField(max_length=255, blank=True, null=True)
     operating_system = models.CharField(max_length=100, blank=True, null=True, verbose_name="Operating System")
     users = models.CharField(max_length=100,blank=True, null=True)
@@ -57,6 +60,24 @@ class Target(models.Model):
         verbose_name = "Target"
         verbose_name_plural = "Targets"
         ordering = ['-created_at'] # Show newest first by default
+
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
 
 class Credential(models.Model):
     """Represents a captured credential."""
@@ -104,6 +125,24 @@ class Credential(models.Model):
         verbose_name_plural = "Credentials"
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
+
 def get_enum_data_path(instance, filename):
     """ Generates the upload path using Target hostname or IP, sanitized. """
     target_identifier = 'no_target' # Default if no target
@@ -145,6 +184,24 @@ class Mitigation(models.Model):
         verbose_name_plural = "Mitigations"
         ordering = ['name']
 
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
+
 class OplogEntry(models.Model):
     """Represents a single operator log entry."""
     operator = models.ForeignKey(
@@ -155,8 +212,8 @@ class OplogEntry(models.Model):
     target = models.ForeignKey(
         Target,
         on_delete=models.SET_NULL, # Keep log if target is deleted, just remove link
-        blank=True,
-        null=True,
+        blank=False, # Make target selection mandatory in forms
+        null=True,   # Still allow NULL in DB for now to avoid migration complexity with existing data
         related_name='oplog_entries'
     )
     timestamp = models.DateTimeField(auto_now_add=True) # Automatically set on creation
@@ -194,6 +251,12 @@ class OplogEntry(models.Model):
     def save(self, *args, **kwargs):
         # Call the original save method first to save the OplogEntry
         # and ensure self.pk and file uploads are processed
+        for field in self._meta.fields:
+            # We only want to sanitize CharField and TextField
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
         super().save(*args, **kwargs)
 
         # Now, check if an enum file exists for this entry
@@ -230,6 +293,14 @@ class OplogEntry(models.Model):
                 if update_needed:
                     enum_data.save() # Save the changes to the existing EnumerationData
 
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
 
 class EnumerationData(models.Model):
     """Stores data and files related to enumeration activities."""
@@ -278,6 +349,24 @@ class EnumerationData(models.Model):
         verbose_name = "Enumeration Data"
         verbose_name_plural = "Enumeration Data"
         ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
 
 def get_payload_path(instance, filename):
     """ Path for Payload files """
@@ -329,6 +418,24 @@ class Payload(models.Model):
         verbose_name_plural = "Payloads"
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
+
 class ExfilFile(models.Model):
     """ Represents a single exfiltrated file linked to an OplogEntry """
     oplog_entry = models.ForeignKey(
@@ -348,6 +455,23 @@ class ExfilFile(models.Model):
         verbose_name_plural = "Exfiltrated Files"
         ordering = ['-uploaded_at']
 
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
+
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))
 
 class Note(models.Model):
     """ Represents a general note, finding, or piece of information. """
@@ -375,5 +499,20 @@ class Note(models.Model):
         verbose_name_plural = "Administrative Notes"
         ordering = ['-updated_at', '-created_at'] # Show most recently updated first
 
+    def save(self, *args, **kwargs):
+        # Sanitize text fields before saving
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    setattr(self, field.name, sanitize_string(value))
+        super().save(*args, **kwargs) # Call the original save method
 
-
+    def clean(self):
+        super().clean()
+        for field in self._meta.fields:
+            if isinstance(field, (CharField, TextField)):
+                value = getattr(self, field.name)
+                if value:
+                    #setattr(self, field.name, strip_non_printable(value))
+                    setattr(self, field.name, sanitize_string(value))

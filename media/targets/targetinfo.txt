@@ -1,0 +1,1 @@
+This folder is for target specific data. i.e. exfil, enumeration, etc.

@@ -53,8 +53,8 @@ class MitigationAdmin(admin.ModelAdmin):
 @admin.register(OplogEntry)
 class OplogEntryAdmin(admin.ModelAdmin):
     #list_display = ('__str__', 'target', 'command', 'timestamp')
-    list_display = ('timestamp', 'target', 'src_ip', 'command', 'tool', 'notes','screenshot', 'enum', 'view_enum_link', 'mitigations__name', 'operator__username')
-    search_fields = ('operator__username', 'target__hostname', 'target__ip_address', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url', 'mitigations__name')
+    list_display = ('timestamp', 'target', 'src_ip', 'command', 'screenshot', 'view_enum_link', 'enum', 'notes', 'tool', 'operator')
+    search_fields = ('operator__username', 'target__hostname', 'target__ip_address', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url', 'mitigation')
     list_filter = ('timestamp', 'operator', 'target')
     # Make operator field read-only after creation (usually set automatically)
     readonly_fields = ('timestamp', 'view_enum_link')
