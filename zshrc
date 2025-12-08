@@ -223,7 +223,7 @@ PS1=$'\n%F{white}╭ [%F{reset}$(if [[ $? == 0 ]]; then echo "%F{green}✓%F{res
 # ==============================================================================
 
 function my_ip() {
-    ip -4 addr | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n 1
+    ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+(\.\d+){3}'
 }
 
 function search(){
