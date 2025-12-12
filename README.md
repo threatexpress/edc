@@ -8,10 +8,14 @@ Start a venv and install requirements
 python3 -m venv venv
 source venv/bin/activate
 
+pip install jq
 pip install django
 pip install Pillow
 pip install djangorestframework
 pip install python-docx
+pip install channels
+pip install daphne
+pip install uvicorn
 ```
 
 Initialze the server (only if updates are made, otherwise just skip)
@@ -19,6 +23,7 @@ Initialze the server (only if updates are made, otherwise just skip)
 python manage.py makemigrations collector --empty --name populate_mitigations
 python manage.py makemigrations collector
 python manage.py migrate
+python manage collectstatic
 ```
 Create a user if required (should not be required)
 ```
@@ -28,9 +33,40 @@ python manage.py createsuperuser
 
 Start the server
 ```
-python manage.py runserver 0.0.0.0:8000
+uvicorn edc_project.asgi:application --host 0.0.0.0 --port 8889 --reload
 ```
+
 Note: DEBUG is set to True. When deploying on an open or connected network, set to False
+
+### If using nginx or other rev proxy
+Ensure you are handling sockets for chat.
+The main thing here is the upgrade and connection headers.
+```
+server {
+    listen 80;
+    server_name domain.com;
+
+    location / {
+        # Required for WebSocket Proxying
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Standard headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Proxy pass to the uvicorn server running on 8889
+        proxy_pass http://127.0.0.1:8889;
+
+        # To lengthen timeouts (if connections are dropping)
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_connect_timeout 75;
+    }
+}
+```
 
 ### API
 ```

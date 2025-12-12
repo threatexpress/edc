@@ -1,5 +1,5 @@
 # ~/.zshrc for zsh interactive shells.
-# Last Updated: 2025-06-28
+# Last Updated: 2025-12-12
 
 # ==============================================================================
 #                   EDC (Engagement Data Collector) Configuration
@@ -7,6 +7,7 @@
 # ==============================================================================
 
 # IMPORTANT: Ensure 'operator' & 'EDC_API_TOKEN' are unique for each distinct user.
+# These are examples. Change to your users and regen keys.
 export EDC_API_URL="http://10.62.0.2:8889"
 #export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali1
 export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali2
@@ -21,7 +22,7 @@ export operator=${operator:-"kali2"} # Each user should customize this to match 
 # ==============================================================================
 
 # IMPORTANT: Define the path to YOUR network share mount point.
-SHARE_MOUNT_TARGET="${HOME}/Desktop/vise-share" # Verify this path!
+SHARE_MOUNT_TARGET="${HOME}/Desktop/share" # Verify this path!
 LOG_SUBDIR_BASENAME="5-logs"
 if mountpoint -q "${SHARE_MOUNT_TARGET}" 2>/dev/null; then
     export ZSH_LOG_DIRECTORY="${SHARE_MOUNT_TARGET}/${LOG_SUBDIR_BASENAME}"
@@ -235,12 +236,119 @@ function mkcd() {
 }
 
 function sst() {
-    if [[ $# -ne 2 ]]; then echo "Usage: sst <desc_no_spaces> <target_ip_or_host>"; return 1; fi
-    local subject="$1"; local suffix="$2"
+    local subject="" suffix="" log_to_api=false
+    local OPTIND OPTARG
+    OPTIND=1
+
+    # Check for -l option first
+    if [[ "$1" == "-l" ]]; then
+        log_to_api=true
+        shift # Remove the -l argument
+    fi
+
+    # Check for correct number of remaining arguments
+    if [[ $# -ne 2 ]]; then 
+        echo "Usage: sst [-l] <desc_no_spaces> <target_ip_or_host>"
+        echo "-l adds a log to edc after target selection."
+        if [[ "$log_to_api" == true ]]; then 
+            echo "Note: When using -l, the screenshot will be uploaded to EDC with the selected target."
+        else
+            echo "Note: The screenshot will be saved locally to ${ZSH_LOG_DIRECTORY}/screenshots/."
+        fi
+        return 1
+    fi
+
+    subject="$1" # Description for filename (no spaces)
+    suffix="$2"  # IP or Host for filename
+
     local dt; dt=$(date '+%Y%m%d_%H%M%S')
-    local filename="${ZSH_LOG_DIRECTORY}/screenshots/${dt}_${operator}_${HOSTNAME_SHORT}_${subject}_${suffix}.png"
-    echo "Taking screenshot, select window or area..."; import "$filename"
-    if [ $? -eq 0 ]; then echo "Screenshot saved: $filename"; else echo "Screenshot failed."; fi
+    local screenshot_filename="${ZSH_LOG_DIRECTORY}/screenshots/${dt}_${operator}_${HOSTNAME_SHORT}_${subject}_${suffix}.png"
+    
+    echo "Taking screenshot, select window or area..."; 
+    import "$screenshot_filename"
+    local import_status=$?
+
+    if [ $import_status -ne 0 ]; then 
+        echo "Screenshot failed (import exit status: $import_status)."
+        # Clean up the zero-byte file if it exists, though 'import' usually deletes on fail
+        if [ -f "$screenshot_filename" ] && [ ! -s "$screenshot_filename" ]; then
+            rm "$screenshot_filename"
+        fi
+        return 1
+    fi
+    
+    echo "Screenshot saved: $screenshot_filename"
+
+    if [[ "$log_to_api" == true ]]; then
+        if [[ -z "$EDC_API_URL" || -z "$EDC_API_TOKEN" ]]; then
+            echo "Error: EDC_API_URL or EDC_API_TOKEN not set. Cannot log screenshot to API." >&2
+            # Do not return, as the local screenshot was already successful
+            return 0
+        fi
+
+        echo "--- Logging Screenshot to EDC API ---" >&2
+        
+        # 1. Select Target
+        local selected_target_id
+        selected_target_id=$(_select_target_id) # Uses existing helper function
+        local target_selection_status=$?
+        if [[ $target_selection_status -ne 0 ]]; then 
+            echo "Warning: Target selection failed. Oplog entry will not be created." >&2
+            return 0
+        fi
+
+        # 2. Build API Request
+        local base_url="${EDC_API_URL%/}"
+        local oplog_api_url="${base_url}/collector/api/oplog/"
+
+        local tool="screenshot"
+        local notes_desc="Screenshot of ${subject} (${suffix})"
+        local cmd_executed="sst -l ${subject} ${suffix}" # Record the command run
+
+        local curl_opts=()
+        curl_opts+=(-s -L -X POST)
+        curl_opts+=(-H "Authorization: Token ${EDC_API_TOKEN}")
+        curl_opts+=(-F "command=$cmd_executed")
+        curl_opts+=(-F "output=Screenshot uploaded: ${screenshot_filename}") # Simple output message
+        curl_opts+=(-F "src_host=$(hostname)")
+        curl_opts+=(-F "src_ip=$(my_ip)")
+        curl_opts+=(-F "tool=$tool")
+        curl_opts+=(-F "notes=$notes_desc")
+        
+        if [[ -n "$selected_target_id" ]]; then 
+            curl_opts+=(-F "target_id=$selected_target_id")
+        fi
+
+        if [[ -f "$screenshot_filename" ]]; then
+            echo "  -> Attaching screenshot for upload..." >&2
+            curl_opts+=(-F "screenshot=@$screenshot_filename")
+        fi
+        
+        curl_opts+=(-w '\n%{http_code}')
+
+        # 3. Execute curl and Process Response
+        local combined_output post_curl_exit_status post_http_code post_response_body
+        combined_output=$(curl "${curl_opts[@]}" "${oplog_api_url}")
+        post_curl_exit_status=$?
+
+        if [[ "$post_curl_exit_status" -ne 0 ]]; then
+            echo "Error: curl failed submitting oplog (exit status ${post_curl_exit_status}). Screenshot remains local." >&2
+            return 0
+        fi
+
+        post_http_code="${combined_output##*$'\n'}"
+        post_response_body="${combined_output%$'\n'*}"
+
+        if [[ "$post_http_code" -eq 201 ]]; then
+            echo "Success! Oplog entry created for screenshot (HTTP ${post_http_code})." >&2
+        else
+            echo "Error: Failed to create oplog entry (HTTP ${post_http_code}). Screenshot remains local." >&2
+            # Try to print the error response body
+            echo "$post_response_body" | tr -d '\r\n' | sed 's/[^[:print:][:space:]]//g' | tr -d '\000-\010\013\014\016-\037' | jq '.' 2>/dev/null || echo "$post_response_body" >&2
+        fi
+    fi
+    
+    return 0
 }
 
 
