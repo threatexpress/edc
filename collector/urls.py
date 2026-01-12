@@ -46,5 +46,7 @@ urlpatterns = [
 
     # Report URL
     path('report/findings/', views.finding_report_view, name='finding-report'),
+    path('report/findings/list/', views.findings_list_view, name='findings-list'),
+    path('report/findings/list/export/', views.export_findings_csv, name='findings-list-export'),
     path('report/findings/export/docx/', views.finding_report_export_docx, name='finding-report-export-docx'),
 ]

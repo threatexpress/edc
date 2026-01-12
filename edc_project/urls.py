@@ -24,6 +24,9 @@ urlpatterns = [
     # All URLs starting with 'collector/' will be handled by collector/urls.py
     path('collector/', include('collector.urls')),
 
+    # Chat URL
+    path('chat/', include('chat.urls')),
+
     # Add other paths for other apps or project-wide views later
     path('accounts/', include('django.contrib.auth.urls')), # For login/logout views
 
@@ -35,3 +38,4 @@ urlpatterns = [
 
 #if settings.DEBUG:
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

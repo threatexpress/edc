@@ -393,7 +393,7 @@ mitigation_data = [
     "description": "Disable the Web Proxy Auto-Discovery (WPAD) protocol via DNS and DHCP settings, and ensure WinHTTP/WinINET clients are not configured to auto-detect settings, preventing WPAD spoofing attacks.",
     "category": "Services",
     "reference": "CCI: 000381"
-  }
+  },
 ]
 
 def populate_findings(apps, schema_editor):

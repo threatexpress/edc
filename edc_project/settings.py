@@ -13,6 +13,7 @@ For updates to the structure contact James Tubberville
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,6 +28,9 @@ SECRET_KEY = 'django-insecure-#yviw(q(n-%%7tze8u81mu3v6g1m*f&0nfvv3bj&o=^!&%wygr
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
 ALLOWED_HOSTS = ['*']
 
 
@@ -40,6 +44,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'collector.apps.CollectorConfig',
+    'chat',
+    'channels',
     'rest_framework',
     'rest_framework.authtoken',
 ]
@@ -52,6 +58,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://127.0.0.1:*',
+    'http://localhost:*',
+    'http://0.0.0.0:*',
+    'http://10.62.0.2:*',
 ]
 
 ROOT_URLCONF = 'edc_project.urls'
@@ -88,9 +101,21 @@ REST_FRAMEWORK = {
 }
 
 WSGI_APPLICATION = 'edc_project.wsgi.application'
+ASGI_APPLICATION = 'edc_project.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        # Using the in-memory backend for isolated venv and no external service (like Redis)
+        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+    }
+}
 
 
 # Database
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_SAVE_EVERY_REQUEST = True
+
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
@@ -135,6 +160,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

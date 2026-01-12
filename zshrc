@@ -1,5 +1,5 @@
 # ~/.zshrc for zsh interactive shells.
-# Last Updated: 2025-12-12
+# Last Updated: 2022-12-08
 
 # ==============================================================================
 #                   EDC (Engagement Data Collector) Configuration
@@ -7,13 +7,8 @@
 # ==============================================================================
 
 # IMPORTANT: Ensure 'operator' & 'EDC_API_TOKEN' are unique for each distinct user.
-# These are examples. Change to your users and regen keys.
-export EDC_API_URL="http://10.62.0.2:8889"
-#export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali1
-export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali2
-#export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali3
-#export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali4
-#export EDC_API_TOKEN="3dd9db6cce9c3c8f4802e94c4f5adc3e1d2b8104" #kali5
+export EDC_API_URL="http://172.16.1.10:8080"
+#export EDC_API_TOKEN="exampletokensremovedhere" #kali1
 export operator=${operator:-"kali2"} # Each user should customize this to match the token.
 
 
@@ -44,6 +39,20 @@ HOSTNAME_SHORT=$(hostname -s)
 
 : ${DISPLAY:=:0}
 export DISPLAY
+
+VENV_DIR="${HOME}/venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating virtual environment at $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
+    if [ $? -eq 0 ]; then
+        echo "Successfully created virtual environment."
+    else
+        echo "Error: Failed to create virtual environment. Ensure 'python3' and the 'venv' module are installed."
+        exit 1
+    fi
+else
+    echo "Activating venv at $VENV_DIR"
+fi
 
 # Activates the Python virtual environment for this shell session.
 source ~/venv/bin/activate
@@ -224,7 +233,7 @@ PS1=$'\n%F{white}╭ [%F{reset}$(if [[ $? == 0 ]]; then echo "%F{green}✓%F{res
 # ==============================================================================
 
 function my_ip() {
-    ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+(\.\d+){3}'
+    ip -4 addr show eth1| grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n 1
 }
 
 function search(){
@@ -237,43 +246,46 @@ function mkcd() {
 
 function sst() {
     local subject="" suffix="" log_to_api=false
+    local enum_file=""
     local OPTIND OPTARG
     OPTIND=1
 
-    # Check for -l option first
-    if [[ "$1" == "-l" ]]; then
-        log_to_api=true
-        shift # Remove the -l argument
-    fi
+    # Parse options
+    while getopts "le:" opt; do
+        case "$opt" in
+            l) log_to_api=true ;;
+            e) enum_file="$OPTARG" ;;
+            *) echo "Usage: sst [-l] [-e enum_file] <desc> <target>" && return 1 ;;
+        esac
+    done
+    shift $((OPTIND - 1))
 
-    # Check for correct number of remaining arguments
+    # Check for correct number of remaining arguments (desc and target)
     if [[ $# -ne 2 ]]; then 
-        echo "Usage: sst [-l] <desc_no_spaces> <target_ip_or_host>"
-        echo "-l adds a log to edc after target selection."
-        if [[ "$log_to_api" == true ]]; then 
-            echo "Note: When using -l, the screenshot will be uploaded to EDC with the selected target."
-        else
-            echo "Note: The screenshot will be saved locally to ${ZSH_LOG_DIRECTORY}/screenshots/."
-        fi
+        echo "Usage: sst [-l] [-e <enum_path>] <desc_no_spaces> <target_ip_or_host>"
+        echo "  -l           : Adds a log entry to EDC after target selection."
+        echo "  -e <file>    : Uploads an enumeration file during log submission."
+        echo ""
+        echo "Usage Example: sst file_permissions target1"
+        echo "  saves screenshot as YYYYMMDD_HHMMSS_file_permissions_target1.png"
+        echo ""
+        echo "Log Example: sst -l -e target1.nmap file_access target1"
         return 1
     fi
 
-    subject="$1" # Description for filename (no spaces)
+    subject="$1" # Description for filename
     suffix="$2"  # IP or Host for filename
 
     local dt; dt=$(date '+%Y%m%d_%H%M%S')
     local screenshot_filename="${ZSH_LOG_DIRECTORY}/screenshots/${dt}_${operator}_${HOSTNAME_SHORT}_${subject}_${suffix}.png"
     
-    echo "Taking screenshot, select window or area..."; 
+    echo "Taking screenshot, select window or area..."
     import "$screenshot_filename"
     local import_status=$?
 
     if [ $import_status -ne 0 ]; then 
         echo "Screenshot failed (import exit status: $import_status)."
-        # Clean up the zero-byte file if it exists, though 'import' usually deletes on fail
-        if [ -f "$screenshot_filename" ] && [ ! -s "$screenshot_filename" ]; then
-            rm "$screenshot_filename"
-        fi
+        [[ -f "$screenshot_filename" && ! -s "$screenshot_filename" ]] && rm "$screenshot_filename"
         return 1
     fi
     
@@ -281,75 +293,55 @@ function sst() {
 
     if [[ "$log_to_api" == true ]]; then
         if [[ -z "$EDC_API_URL" || -z "$EDC_API_TOKEN" ]]; then
-            echo "Error: EDC_API_URL or EDC_API_TOKEN not set. Cannot log screenshot to API." >&2
-            # Do not return, as the local screenshot was already successful
+            echo "Error: EDC_API_URL or EDC_API_TOKEN not set."
             return 0
         fi
 
-        echo "--- Logging Screenshot to EDC API ---" >&2
-        
-        # 1. Select Target
-        local selected_target_id
-        selected_target_id=$(_select_target_id) # Uses existing helper function
-        local target_selection_status=$?
-        if [[ $target_selection_status -ne 0 ]]; then 
-            echo "Warning: Target selection failed. Oplog entry will not be created." >&2
-            return 0
-        fi
+        echo "--- Logging to EDC API ---"
+        local selected_target_id; selected_target_id=$(_select_target_id)
+        [[ $? -ne 0 ]] && return 0
 
-        # 2. Build API Request
         local base_url="${EDC_API_URL%/}"
         local oplog_api_url="${base_url}/collector/api/oplog/"
+        local cmd_executed="sst -l ${exfil_file:+-x $exfil_file} ${enum_file:+-e $enum_file} ${subject} ${suffix}"
 
-        local tool="screenshot"
-        local notes_desc="Screenshot of ${subject} (${suffix})"
-        local cmd_executed="sst -l ${subject} ${suffix}" # Record the command run
-
-        local curl_opts=()
-        curl_opts+=(-s -L -X POST)
-        curl_opts+=(-H "Authorization: Token ${EDC_API_TOKEN}")
+        local curl_opts=(-s -L -X POST -H "Authorization: Token ${EDC_API_TOKEN}")
         curl_opts+=(-F "command=$cmd_executed")
-        curl_opts+=(-F "output=Screenshot uploaded: ${screenshot_filename}") # Simple output message
+        curl_opts+=(-F "output=Files uploaded: screenshot, ${exfil_file:-no exfil}, ${enum_file:-no enum}")
         curl_opts+=(-F "src_host=$(hostname)")
         curl_opts+=(-F "src_ip=$(my_ip)")
-        curl_opts+=(-F "tool=$tool")
-        curl_opts+=(-F "notes=$notes_desc")
+        curl_opts+=(-F "tool=screenshot")
+        curl_opts+=(-F "notes=Files from ${subject} (${suffix})")
         
-        if [[ -n "$selected_target_id" ]]; then 
-            curl_opts+=(-F "target_id=$selected_target_id")
+        [[ -n "$selected_target_id" ]] && curl_opts+=(-F "target_id=$selected_target_id")
+        [[ -f "$screenshot_filename" ]] && curl_opts+=(-F "screenshot=@$screenshot_filename")
+
+        # Attach Exfiltration File if provided
+        if [[ -n "$exfil_file" && -f "$exfil_file" ]]; then
+            echo "  -> Attaching exfil file: $exfil_file"
+            curl_opts+=(-F "exfil=@$exfil_file")
         fi
 
-        if [[ -f "$screenshot_filename" ]]; then
-            echo "  -> Attaching screenshot for upload..." >&2
-            curl_opts+=(-F "screenshot=@$screenshot_filename")
+        # Attach Enumeration File if provided
+        if [[ -n "$enum_file" && -f "$enum_file" ]]; then
+            echo "  -> Attaching enum file: $enum_file"
+            curl_opts+=(-F "enum=@$enum_file")
         fi
         
         curl_opts+=(-w '\n%{http_code}')
-
-        # 3. Execute curl and Process Response
-        local combined_output post_curl_exit_status post_http_code post_response_body
-        combined_output=$(curl "${curl_opts[@]}" "${oplog_api_url}")
-        post_curl_exit_status=$?
-
-        if [[ "$post_curl_exit_status" -ne 0 ]]; then
-            echo "Error: curl failed submitting oplog (exit status ${post_curl_exit_status}). Screenshot remains local." >&2
-            return 0
-        fi
-
-        post_http_code="${combined_output##*$'\n'}"
-        post_response_body="${combined_output%$'\n'*}"
+        local combined_output; combined_output=$(curl "${curl_opts[@]}" "${oplog_api_url}")
+        local post_http_code="${combined_output##*$'\n'}"
 
         if [[ "$post_http_code" -eq 201 ]]; then
-            echo "Success! Oplog entry created for screenshot (HTTP ${post_http_code})." >&2
+            echo "Success! Oplog entry created (HTTP ${post_http_code})."
         else
-            echo "Error: Failed to create oplog entry (HTTP ${post_http_code}). Screenshot remains local." >&2
-            # Try to print the error response body
-            echo "$post_response_body" | tr -d '\r\n' | sed 's/[^[:print:][:space:]]//g' | tr -d '\000-\010\013\014\016-\037' | jq '.' 2>/dev/null || echo "$post_response_body" >&2
+            echo "Error: Failed to create oplog entry (HTTP ${post_http_code})."
+            echo "${combined_output%$'\n'*}" | jq '.' 2>/dev/null
         fi
     fi
-    
     return 0
 }
+
 
 
 # ==============================================================================
@@ -506,8 +498,8 @@ function edc_token() {
     # --- Prompt for Credentials ---
     local username
     local password
-    read -p "Enter EDC Username: " username
-    read -sp "Enter EDC Password: " password
+    vared -cp "Enter EDC Username: " username
+    vared -cp "Enter EDC Password: " password
     echo # Add a newline after hidden password input
 
     if [[ -z "$username" ]] || [[ -z "$password" ]]; then
@@ -706,7 +698,6 @@ _select_target_id() {
         return 1
     else
         target_ids=("${(@f)$(echo "$all_targets_json" | jq -r '.[].id')}")
-        target_hostnames=("${(@f)$(echo "$all_targets_json" | jq -r '.[].hostname // "N/A"')}")
         target_ips=("${(@f)$(echo "$all_targets_json" | jq -r '.[].ip_address // "N/A"')}")
         echo "Found ${target_count} targets." >&2
     fi
@@ -715,7 +706,7 @@ _select_target_id() {
     #echo "  [0] No Target" >&2
     if [[ "$target_count" -gt 0 ]]; then
         for i in $(seq 1 ${#target_ids[@]}); do
-            printf "  [%d] %s (%s)\n" "${i}" "${target_hostnames[i]}" "${target_ips[i]}" >&2
+            printf "  [%d] %s\n" "${i}" "${target_ips[i]}" >&2
         done
     fi
 

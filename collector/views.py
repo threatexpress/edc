@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, get_object_or_404
-from django.http import FileResponse, Http404, HttpResponseServerError
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseServerError
 from django.views import generic # Using generic class-based views for simplicity
 from django.views.decorators.http import require_POST # For the export view
 import json # To parse priorities from POST
@@ -27,7 +27,7 @@ import docx
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from .serializers import OplogEntrySerializer, TargetSerializer, CredentialSerializer, PayloadSerializer, EnumerationDataSerializer
-from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile, Mitigation
+from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile, Mitigation, Note
 
 # Class-based view for listing targets
 @login_required
@@ -172,6 +172,7 @@ def export_all_data_zip(request):
                 'enumeration_data': EnumerationData,
                 'exfil_files': ExfilFile,
                 #'mitigations': Mitigation,
+                'administrative_notes': Note,
             }
             print("Starting CSV Export...")
 
@@ -644,3 +645,64 @@ def finding_report_export_docx(request):
         print(f"!!! ERROR generating DOCX report: {e}")
         # import traceback; traceback.print_exc();
         return HttpResponse(f"Error generating Word report: {e}", status=500)
+
+
+@staff_member_required
+def findings_list_view(request):
+    #lists all unique findings from mitigation tags and links to the oplog
+
+    # get tagged Oplog entries
+    oplog_entries = OplogEntry.objects.prefetch_related('mitigations', 'target').all()
+
+    # group oplogs
+    findings_map = defaultdict(list)
+
+    for entry in oplog_entries:
+        unique_findings = set(m.finding for m in entry.mitigations.all() if m.finding)
+        for finding in unique_findings:
+            findings_map[finding].append(entry)
+
+    # sorted alphabetically
+    sorted_findings = sorted(findings_map.items())
+
+    context = {
+        'findings_list': sorted_findings,
+        'report_date': now().date(),
+    }
+
+    return render(request, 'collector/findings_list.html', context)
+
+@staff_member_required
+def export_findings_csv(request):
+    oplog_entries = OplogEntry.objects.prefetch_related('mitigations', 'target').all()
+    findings_map = defaultdict(list)
+
+    for entry in oplog_entries:
+        unique_findings = set(m.finding for m in entry.mitigations.all() if m.finding)
+        for finding in unique_findings:
+            findings_map[finding].append(entry)
+
+    sorted_findings = sorted(findings_map.items())
+
+    timestamp = now().strftime('%Y%m%d_%H%M%S')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{timestamp}_findings_list.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Finding Title', 'Affected Targets', 'Oplog Entry IDs'])
+
+    for finding, entries in sorted_findings:
+        targets = set()
+        entry_ids = []
+        for e in entries:
+            entry_ids.append(str(e.pk))
+            if e.target:
+                targets.add(str(e.target.ip_address or e.target.hostname))
+        
+        writer.writerow([
+            finding, 
+            ", ".join(sorted(list(targets))), 
+            ", ".join(entry_ids)
+        ])
+
+    return response

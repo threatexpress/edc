@@ -1,0 +1,163 @@
+{% extends "admin/base.html" %}
+{% load static i18n %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        /* Simple CSS for the chat layout, ensuring good visibility within admin theme */
+        #chat-log {
+            display: flex;
+            flex-direction: column;
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color); /* Use admin variable for borders */
+            padding: 10px;
+            background-color: var(--body-bg); /* Use admin background variable */
+        }
+
+        .chat-message {
+            margin: 3px 0;
+            line-height: 1.4;
+            font-size: 0.95em;
+        }
+        .chat-message a {
+            color: var(--link-fg); /* Use admin variable for link color */
+            text-decoration: underline;
+        }
+        .chat-message-self {
+            text-align: right;
+        }
+        .chat-message-other {
+            text-align: left;
+        }
+        #chat-message-input {
+            width: calc(100% - 100px); /* Leave room for the send button */
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        #chat-message-submit {
+            padding: 8px 15px;
+            vertical-align: middle;
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs">
+        <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+        &rsaquo; {% translate 'Team Chat' %}
+    </div>
+{% endblock %}
+
+{% block content_title %}
+    <h1>{% translate 'Team Operations Chat' %}</h1>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module" id="changelist">
+        <div class="changelist-form">
+            <p class="help">Live chat for authenticated operators. Share links to files, commands, and operational notes.</p>
+            
+            <div id="chat-log">
+                <p style="text-align: center; color: var(--fg-color);">Connecting...</p>
+            </div>
+
+            <div style="margin-top: 10px;">
+                <input type="text" id="chat-message-input" placeholder="Type your message and press Enter...">
+                <input type="button" id="chat-message-submit" value="Send" class="default">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatLog = document.querySelector('#chat-log');
+    const messageInput = document.querySelector('#chat-message-input');
+    const messageSubmit = document.querySelector('#chat-message-submit');
+    const currentUser = "{{ current_user|escapejs }}";
+
+    // Use wss protocol if on https, otherwise ws. 
+    const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+    
+    const chatSocket = new WebSocket(
+        wsProtocol + window.location.host + '/ws/chat/'
+    );
+
+    function linkify(text) {
+        const urlRegex = /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,})/g;
+        const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return safeText.replace(urlRegex, function(url) {
+            let fullUrl = url;
+            if (!url.match(/^https?:\/\//i)) {
+                fullUrl = 'http://' + url;
+            }
+            return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+        });
+    }
+
+    function appendMessage(data) {
+        const log = document.querySelector('#chat-log');
+        const isScrolledToBottom = log.scrollHeight - log.clientHeight <= log.scrollTop + 5;
+        
+        const timestamp = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        const contentHtml = linkify(data.content);
+
+        const msgDiv = document.createElement('div');
+        
+        let usernameColor = 'var(--link-fg)'; 
+        let isSelf = data.username === currentUser;
+        
+        msgDiv.className = isSelf ? 'chat-message chat-message-self' : 'chat-message chat-message-other';
+        
+        msgDiv.innerHTML = `
+            <span style="font-weight: bold; color: ${isSelf ? 'var(--fg-color)' : 'var(--link-fg)'};">${data.username}</span> 
+            <span style="font-weight: bold; color: orange; font-size: 0.8em;">(${timestamp}):</span>
+            <div style="display: inline-block; max-width: 85%; word-wrap: break-word;">${contentHtml}</div>
+        `;
+
+        log.appendChild(msgDiv);
+
+        if (isScrolledToBottom) {
+            log.scrollTop = log.scrollHeight;
+        }
+    }
+
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message) {
+            chatSocket.send(JSON.stringify({
+                'message': message
+            }));
+            messageInput.value = '';
+        }
+    }
+
+    messageInput.focus();
+    messageInput.onkeyup = function(e) {
+        if (e.key === 'Enter') { 
+            messageSubmit.click();
+        }
+    };
+    messageSubmit.onclick = sendMessage;
+
+    chatSocket.onopen = function(e) {
+        // Replace "Connecting..." message with a blank log
+        chatLog.innerHTML = ''; 
+        chatLog.scrollTop = chatLog.scrollHeight;
+    };
+
+    chatSocket.onclose = function(e) {
+        chatLog.innerHTML += '<div style="text-align: center; color: red;">Disconnected. Reload to reconnect.</div>';
+    };
+
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        appendMessage(data);
+    };
+
+</script>
+{% endblock %}

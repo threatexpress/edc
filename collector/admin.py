@@ -34,7 +34,8 @@ class ExfilFileInline(admin.TabularInline):
 
 @admin.register(Target)
 class TargetAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'operating_system', 'users', 'created_at', 'updated_at')
+    #list_display = ('__str__', 'operating_system', 'users', 'created_at', 'updated_at')
+    list_display = ('ip_address', 'hostname', 'operating_system', 'users')
     search_fields = ('hostname', 'ip_address', 'description', 'operating_system', 'users')
     list_filter = ('operating_system', 'created_at')
 
@@ -101,7 +102,7 @@ class OplogEntryAdmin(admin.ModelAdmin):
 
 @admin.register(Credential)
 class CredentialAdmin(admin.ModelAdmin):
-    list_display = ('username', 'password_plaintext', 'service', 'target', 'operator', 'created_at', 'hash_type')
+    list_display = ('username', 'password_plaintext', 'service', 'target', 'operator', 'hash_type')
     # Exclude the plaintext password from the main list view for safety!
     list_filter = ('service', 'hash_type', 'operator', 'target', 'created_at')
     search_fields = ('username', 'password_plaintext', 'service', 'target__hostname', 'target__ip_address', 'notes', 'hash_value', 'operator__username')
@@ -169,7 +170,7 @@ class EnumerationDataAdmin(admin.ModelAdmin):
 
 @admin.register(Payload)
 class PayloadAdmin(admin.ModelAdmin):
-    list_display = ('name', 'payload_type', 'operator', 'created_at', 'updated_at')
+    list_display = ('name', 'payload_type', 'operator')
     list_filter = ('payload_type', 'operator', 'created_at')
     search_fields = ('name', 'description', 'operator__username', 'file')
     readonly_fields = ('created_at', 'updated_at')

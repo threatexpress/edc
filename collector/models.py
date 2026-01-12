@@ -10,16 +10,15 @@ def get_target_identifier(target_obj):
     """ Helper function to get sanitized identifier from a Target object """
     target_identifier = 'no_target' # Default if no target
     if target_obj:
-        # Prioritize hostname
-        if target_obj.hostname:
-            target_identifier = target_obj.hostname
-        # Fallback to IP address
-        elif target_obj.ip_address:
+        # Prioritize IP address as requested
+        if target_obj.ip_address:
             target_identifier = str(target_obj.ip_address) # Ensure it's a string
+        # Fallback to hostname
+        elif target_obj.hostname:
+            target_identifier = target_obj.hostname
         # Final fallback if target exists but has no hostname or IP (use PK)
         elif target_obj.pk:
              target_identifier = f'target_{target_obj.pk}'
-        # Very unlikely case: target exists but has no pk yet? Use 'unsaved_target'
         else:
              target_identifier = 'unsaved_target'
 
@@ -31,7 +30,6 @@ def get_oplog_exfil_path(instance, filename):
     """ Path for ExfilFile files, based on PARENT Oplog's Target """
     target_obj = instance.oplog_entry.target if instance.oplog_entry else None
     target_folder = get_target_identifier(target_obj)
-    # ====================================================
     return os.path.join('targets', target_folder, 'exfil_files', filename)
 
 class Target(models.Model):
@@ -46,15 +44,8 @@ class Target(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        # Return a user-friendly representation
-        if self.hostname and self.ip_address:
-            return f"{self.hostname} ({self.ip_address})"
-        elif self.hostname:
-            return self.hostname
-        elif self.ip_address:
-            return str(self.ip_address)
-        else:
-            return f"Target {self.id}"
+        # Return only the IP address as requested
+        return str(self.ip_address) if self.ip_address else f"Target {self.id}"
 
     class Meta:
         verbose_name = "Target"
@@ -144,28 +135,22 @@ class Credential(models.Model):
                     setattr(self, field.name, sanitize_string(value))
 
 def get_enum_data_path(instance, filename):
-    """ Generates the upload path using Target hostname or IP, sanitized. """
+    """ Generates the upload path using Target IP, sanitized. """
     target_identifier = 'no_target' # Default if no target
 
     if instance.target:
-        # Prioritize hostname
-        if instance.target.hostname:
+        # Prioritize IP address for folder structure
+        if instance.target.ip_address:
+            target_identifier = str(instance.target.ip_address)
+        elif instance.target.hostname:
             target_identifier = instance.target.hostname
-        # Fallback to IP address
-        elif instance.target.ip_address:
-            target_identifier = str(instance.target.ip_address) # Ensure it's a string
-        # Final fallback if target exists but has no hostname or IP (use PK)
         elif instance.target.pk:
              target_identifier = f'target_{instance.target.pk}'
-        # Very unlikely case: target exists but has no pk yet? Use 'unsaved_target'
         else:
              target_identifier = 'unsaved_target'
 
-        # Sanitize the identifier for use in a path
-        # Replace dots, colons, slashes, backslashes with underscores
         target_identifier = re.sub(r'[.:\\/]+', '_', target_identifier)
         
-    # Construct the path
     return os.path.join('targets', target_identifier, 'enum_data', filename)
 
 class Mitigation(models.Model):

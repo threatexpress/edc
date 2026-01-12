@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% load static %}
+    <title>Findings Summary List</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/base.css' %}">
+    <style>
+        /* --- Dark Theme Styles - Condensed Version --- */
+        body { 
+            padding: 15px; 
+            font-family: sans-serif; 
+            line-height: 1.4; 
+            background-color: #121212; 
+            color: #e0e0e0; 
+            font-size: 0.9em;
+        }
+        h1 { 
+            color: #ffffff; 
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        hr {
+            border: 0;
+            border-top: 1px solid #333;
+            margin: 10px 0;
+        }
+        .finding-section { 
+            margin-bottom: 20px; 
+            border-left: 4px solid #79aec8; 
+            padding-left: 15px; 
+            background-color: #1e1e1e; 
+            padding-top: 10px;
+            padding-bottom: 10px;
+            border-radius: 0 4px 4px 0;
+        }
+        .finding-title { 
+            font-size: 1.2em; 
+            font-weight: bold; 
+            color: #79aec8; 
+            margin-bottom: 10px; 
+        }
+        .oplog-list { 
+            list-style: none; 
+            padding: 0; 
+            margin-left: 5px;
+        }
+        .oplog-item { 
+            margin: 8px 0; 
+            background: #252525; 
+            padding: 10px; 
+            border-radius: 4px; 
+            border: 1px solid #333; 
+        }
+        .oplog-item a { 
+            color: #9cdcfe; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+        .oplog-item a:hover { 
+            text-decoration: underline; 
+            color: #ffffff;
+        }
+        .oplog-metadata {
+            color: #aaaaaa; 
+            font-size: 0.85em;
+            margin-left: 5px;
+            display: inline; /* Changed to inline to save vertical space */
+        }
+        .detail-label {
+            color: #79aec8;
+            font-weight: bold;
+            font-size: 0.75em;
+            text-transform: uppercase;
+            display: block;
+            margin-top: 5px;
+        }
+        .command-block {
+            background-color: #121212;
+            border: 1px solid #444;
+            color: #dcdcdc;
+            padding: 5px;
+            font-family: monospace;
+            margin: 3px 0;
+            border-radius: 3px;
+            overflow-x: auto;
+            font-size: 0.9em;
+        }
+        .notes-content {
+            color: #cccccc;
+            font-size: 0.9em;
+            margin: 3px 0;
+            white-space: pre-wrap;
+        }
+        .back-link { 
+            margin-bottom: 10px; 
+            display: block; 
+            color: #79aec8; 
+            text-decoration: none; 
+            font-size: 0.85em; 
+        }
+        .back-link:hover { 
+            text-decoration: underline; 
+        }
+    </style>
+</head>
+<body>
+    <a href="{% url 'admin:index' %}" class="back-link">&larr; Back to Admin Home</a>
+    
+    <h1>Findings Summary List</h1>
+    <p style="color: #888; font-size: 0.8em; margin: 0;">Generated on: {{ report_date }}</p>
+    <hr>
+
+    {% if not findings_list %}
+        <p>No findings currently tagged in any Operator Logs.</p>
+    {% else %}
+        {% for finding_title, entries in findings_list %}
+            <div class="finding-section">
+                <div class="finding-title">{{ finding_title }}</div>
+                <ul class="oplog-list">
+                    {% for entry in entries %}
+                        <li class="oplog-item">
+                            <a href="{% url 'admin:collector_oplogentry_change' entry.pk %}" target="_blank">
+                                Oplog {{ entry.pk }}
+                            </a>
+                            <span class="oplog-metadata">
+                                - {{ entry.timestamp }} | Target: {{ entry.target|default:"N/A" }} | Command: {{ entry.command}} | Operator: {{ entry.operator.username }}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+    {% endif %}
+</body>
+</html>

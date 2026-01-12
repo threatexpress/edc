@@ -1,0 +1,19 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="module">
+    <h2>{% translate 'OPERATIONS CENTER' %}</h2>
+    <div class="module-body">
+        <p><a href="{% url 'chat:room' %}">{% translate 'Open Chat' %}</a></p>
+        <p><a href="{% url 'collector:findings-list' %}">{% translate 'Findings List' %}</a></p>
+    </div>
+</div>
+
+{{ block.super }}
+{% endblock %}
+
+{% block sidebar %}
+    {# Keep the sidebar content as it is in the default admin/index.html #}
+    {{ block.super }}
+{% endblock %}
