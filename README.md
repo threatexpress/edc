@@ -14,6 +14,8 @@ pip install Pillow
 pip install djangorestframework
 pip install python-docx
 pip install channels
+pip install websocks
+pip install wsproto
 pip install daphne
 pip install uvicorn
 ```
@@ -48,6 +50,7 @@ server {
 
     location / {
         # Required for WebSocket Proxying
+        proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
