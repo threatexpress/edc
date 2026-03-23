@@ -14,7 +14,7 @@ pip install Pillow
 pip install djangorestframework
 pip install python-docx
 pip install channels
-pip install websocks
+pip install websocket
 pip install wsproto
 pip install daphne
 pip install uvicorn
