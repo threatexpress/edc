@@ -187,6 +187,21 @@ class Mitigation(models.Model):
                     #setattr(self, field.name, strip_non_printable(value))
                     setattr(self, field.name, sanitize_string(value))
 
+def oplog_screenshot_upload_path(instance, filename):
+    return os.path.join('oplog_screenshots', filename)
+
+class OplogScreenshot(models.Model):
+    oplog_entry = models.ForeignKey(
+        'OplogEntry', 
+        on_delete=models.CASCADE, 
+        related_name='screenshots'
+    )
+    image = models.ImageField(upload_to=oplog_screenshot_upload_path)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Screenshot for Entry {self.oplog_entry_id}: {self.image.name}"
+
 class OplogEntry(models.Model):
     """Represents a single operator log entry."""
     operator = models.ForeignKey(

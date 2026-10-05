@@ -10,7 +10,7 @@ from rest_framework.authtoken.admin import TokenAdmin
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.models import TokenProxy
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile, Mitigation, Note
+from .models import Target, OplogEntry, OplogScreenshot, Credential, EnumerationData, Payload, ExfilFile, Mitigation, Note
 
 class TokenInline(admin.StackedInline):
     model = TokenProxy # Use TokenProxy here
@@ -51,12 +51,56 @@ class MitigationAdmin(admin.ModelAdmin):
     search_fields = ('name', 'finding', 'reference', 'description', 'category')
     list_filter = ('category',)
 
+class OplogScreenshotInline(admin.TabularInline):
+    model = OplogScreenshot
+    extra = 1
+    readonly_fields = ('preview',)
+
+    def preview(self, instance):
+        if instance.image:
+            return format_html(
+                '<a href="{0}" target="_blank"><img src="{0}" style="max-height: 80px; max-width: 120px; border-radius: 4px;" /></a>',
+                instance.image.url
+            )
+        return "-"
+
 @admin.register(OplogEntry)
 class OplogEntryAdmin(admin.ModelAdmin):
+    inlines = [OplogScreenshotInline, ExfilFileInline]
     #list_display = ('__str__', 'target', 'command', 'timestamp')
-    list_display = ('timestamp', 'target', 'src_ip', 'command', 'screenshot', 'view_enum_link', 'enum', 'notes', 'tool', 'operator')
+    list_display = ('timestamp', 'target', 'src_ip', 'command', 'screenshots_preview', 'view_enum_link', 'enum', 'notes', 'tool', 'operator')
     search_fields = ('operator__username', 'target__hostname', 'target__ip_address', 'src_ip', 'src_host', 'src_port', 'command', 'output', 'notes', 'tool', 'url')
     list_filter = ('timestamp', 'operator', 'target')
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related('screenshots')
+
+    def screenshots_preview(self, obj):
+        # Collect previews from related screenshots
+        screens = obj.screenshots.all()
+        if not screens and hasattr(obj, 'screenshot') and obj.screenshot:
+            # Fallback to legacy single screenshot field if present
+            return format_html(
+                '<a href="{0}" target="_blank"><img src="{0}" style="max-height: 50px; max-width: 75px; margin: 2px; border-radius: 3px;" /></a>',
+                obj.screenshot.url
+            )
+        
+        if not screens:
+            return "-"
+
+        html_snippets = []
+        for s in screens:
+            if s.image:
+                html_snippets.append(
+                    f'<a href="{s.image.url}" target="_blank" style="margin-right: 4px; display: inline-block;">'
+                    f'<img src="{s.image.url}" style="max-height: 50px; max-width: 75px; border: 1px solid #ccc; border-radius: 3px;" />'
+                    f'</a>'
+                )
+        return format_html("".join(html_snippets))
+
+    screenshots_preview.short_description = "Screenshots"
+
     # Make operator field read-only after creation (usually set automatically)
     readonly_fields = ('timestamp', 'view_enum_link')
 
@@ -74,8 +118,6 @@ class OplogEntryAdmin(admin.ModelAdmin):
         }),
     )
 
-    # Add the ExfilFile inline
-    inlines = [ExfilFileInline, ]
 
     filter_horizontal = ('mitigations',) # Or filter_vertical = ('mitigations',)
 

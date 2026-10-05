@@ -1,6 +1,6 @@
 Refactor of the original EDC
 
-## Install and setup
+## Install
 Copy files to your run location
 
 Start a venv and install requirements
@@ -22,12 +22,12 @@ pip install uvicorn
 
 Initialze the server (only if updates are made, otherwise just skip)
 ```
-python manage.py makemigrations collector --empty --name populate_mitigations
+python manage.py makemigrations collector --empty --name populate_mitigations (only for repopulating mitigations from empty file) 
 python manage.py makemigrations collector
 python manage.py migrate
-python manage collectstatic
+python manage.py collectstatic
 ```
-Create a user if required (should not be required)
+Create a user if required
 ```
 python manage.py createsuperuser
 
@@ -184,5 +184,5 @@ python manage.py startapp collector
 python manage.py makemigrations collector
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py runserver
+uvicorn edc_project.asgi:application --host 0.0.0.0 --port 8889 --reload
 ```

@@ -116,6 +116,13 @@ class CredentialListCreateAPIView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # Automatically set operator on create
         serializer.save(operator=self.request.user)
+        uploaded_screenshots = self.request.FILES.getlist('screenshots')
+
+        if not uploaded_screenshots and 'screenshot' in self.request.FILES:
+            uploaded_screenshots = self.request.FILES.getlist('screenshot')
+
+        for img in uploaded_screenshots:
+            OplogScreenshot.objects.create(oplog_entry=instance, image=img)
 
 class PayloadListCreateAPIView(generics.ListCreateAPIView):
     queryset = Payload.objects.all()
@@ -143,187 +150,137 @@ class EnumerationDataListCreateAPIView(generics.ListCreateAPIView):
 @staff_member_required
 def export_all_data_zip(request):
     """
-    Creates a Zip archive containing CSV exports of main models and all uploaded media files.
-    Outputs string representation for ForeignKeys and custom handling for OplogEntry mitigations.
-    Writes to a temporary disk file first.
+    Creates a ZIP archive containing CSV and TXT exports of all primary models,
+    retaining ForeignKey resolution and custom OplogEntry mitigation/finding handling,
+    along with all uploaded media files.
     """
-    print("\n***** RUNNING LATEST EXPORT CODE v12 (Temp File) *****\n")
-
-    temp_zip_file = None  # Initialize variable to hold temp file info
+    temp_zip_file = None
     temp_zip_path = None
 
     try:
-        # --- Create a temporary file on disk ---
-        # delete=False is important so we can reopen it after ZipFile closes it.
+        # Create a temporary file on disk to prevent RAM exhaustion
         temp_zip_file = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
         temp_zip_path = temp_zip_file.name
-        temp_zip_file.close() # Close the handle, ZipFile works with the path
-        print(f"Creating temporary zip archive at: {temp_zip_path}")
+        temp_zip_file.close()
 
-        # --- Write directly to the temporary file path ---
         with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
-            # --- 1. Export Models as CSV ---
             models_to_export = {
                 'targets': Target,
                 'oplog_entries': OplogEntry,
+                'oplog_screenshots'
                 'credentials': Credential,
                 'payloads': Payload,
                 'enumeration_data': EnumerationData,
                 'exfil_files': ExfilFile,
-                #'mitigations': Mitigation,
                 'administrative_notes': Note,
             }
-            print("Starting CSV Export...")
 
             for filename_base, model_class in models_to_export.items():
-                print(f"  Exporting {model_class.__name__}")
                 queryset = model_class.objects.all()
 
-                # --- Eager load relations (same logic as before) ---
+                # Eager-load relations
                 if model_class == OplogEntry:
-                     queryset = queryset.select_related('target', 'operator').prefetch_related('mitigations')
+                    queryset = queryset.select_related('target', 'operator').prefetch_related('mitigations')
                 else:
-                     # ... (keep other select_related logic) ...
-                     if hasattr(model_class, 'target'): queryset = queryset.select_related('target')
-                     if hasattr(model_class, 'operator'): queryset = queryset.select_related('operator')
-                     if hasattr(model_class, 'oplog_entry'): queryset = queryset.select_related('oplog_entry__target', 'oplog_entry__operator')
-
+                    if hasattr(model_class, 'target'):
+                        queryset = queryset.select_related('target')
+                    if hasattr(model_class, 'operator'):
+                        queryset = queryset.select_related('operator')
+                    if hasattr(model_class, 'oplog_entry'):
+                        queryset = queryset.select_related('oplog_entry__target', 'oplog_entry__operator')
 
                 if not queryset.exists():
-                     print(f"    Skipping {model_class.__name__} - No records found.")
-                     continue
+                    continue
 
-                # --- Define Headers (same logic as before) ---
+                # Define headers
                 if model_class == OplogEntry:
-                     field_names = [ # Custom headers for OplogEntry
-                         'id', 'timestamp', 'operator', 'target', 'dst_port', 'src_ip', 'src_host',
-                         'src_port', 'url', 'tool', 'command', 'output', 'notes', 'sys_mod',
-                         'screenshot', 'enum', 'Mitigation Names', 'Associated Findings'
-                     ]
-                     concrete_field_names = [f.name for f in model_class._meta.get_fields() if f.concrete and f.name != 'mitigations']
+                    field_names = [
+                        'id', 'timestamp', 'operator', 'target', 'dst_port', 'src_ip', 'src_host',
+                        'src_port', 'url', 'tool', 'command', 'output', 'notes', 'sys_mod',
+                        'screenshot', 'enum', 'Mitigation Names', 'Associated Findings'
+                    ]
+                    concrete_fields = [f for f in model_class._meta.get_fields() if f.concrete and f.name != 'mitigations']
                 else:
-                     field_names = [f.name for f in model_class._meta.get_fields() if f.concrete]
-                     concrete_field_names = field_names
+                    concrete_fields = [f for f in model_class._meta.get_fields() if f.concrete]
+                    field_names = [f.name for f in concrete_fields]
 
-                # Use StringIO for intermediate CSV creation (still efficient)
+                # Initialize in-memory string buffers for both formats
                 csv_buffer = io.StringIO()
-                writer = csv.writer(csv_buffer)
-                writer.writerow(field_names)
+                txt_buffer = io.StringIO()
 
-                # --- Write Data Rows (same logic as before) ---
+                csv_writer = csv.writer(csv_buffer)
+                txt_writer = csv.writer(txt_buffer, delimiter='\t')
+
+                csv_writer.writerow(field_names)
+                txt_writer.writerow(field_names)
+
+                # Process records
                 for obj in queryset:
-                     row = []
-                     for field_name in concrete_field_names:
-                         # ... (keep the exact same logic for getting/formatting concrete field values) ...
-                         value = getattr(obj, field_name)
-                         value_to_append = ''
-                         try:
-                             field_obj = model_class._meta.get_field(field_name)
-                             if isinstance(value, datetime.datetime): value_to_append = value.isoformat()
-                             elif field_obj.is_relation and not field_obj.one_to_many and not field_obj.many_to_many: value_to_append = str(value) if value is not None else ''
-                             elif isinstance(value, file_fields.FieldFile): value_to_append = value.name if (value and value.name) else ''
-                             elif value is None: value_to_append = ''
-                             else: value_to_append = str(value)
-                         except Exception as e:
-                             print(f"Error processing field '{field_name}' for {model_class.__name__} PK {obj.pk}: {e}")
-                             value_to_append = '[ERROR]'
-                         row.append(value_to_append)
+                    row = []
+                    for field_obj in concrete_fields:
+                        field_name = field_obj.name
+                        val = getattr(obj, field_name, None)
+                        val_str = ''
 
-                     # --- Add custom handling for OplogEntry's M2M (same logic as before) ---
-                     if model_class == OplogEntry:
-                         related_mitigations = obj.mitigations.all()
-                         print(f"\n--- DEBUG: Processing OplogEntry PK={obj.pk} ---")
-                         print(f"Mitigation QuerySet: {related_mitigations}")
-                         mitigation_names = []
-                         findings_list_debug = []
-                         for m in related_mitigations:
-                             print(f"  - Mitigation Found: PK={m.pk}, Name='{m.name}', Finding='{m.finding}'")
-                             mitigation_names.append(m.name)
-                             # Add finding only if it's not blank for debug list
-                             if m.finding:
-                                 findings_list_debug.append(m.finding)
-                         print(f"Extracted Names: {mitigation_names}")
-                         print(f"Extracted Non-Blank Findings: {findings_list_debug}")
-                         mitigation_names_str = ", ".join(sorted([m.name for m in related_mitigations]))
-                         findings_list = [m.finding for m in related_mitigations if m.finding]
-                         unique_findings_str = ", ".join(sorted(list(set(findings_list))))
-                         row.append(mitigation_names_str)
-                         row.append(unique_findings_str)
+                        try:
+                            if isinstance(val, datetime.datetime):
+                                val_str = val.isoformat()
+                            elif field_obj.is_relation and not field_obj.one_to_many and not field_obj.many_to_many:
+                                val_str = str(val) if val is not None else ''
+                            elif isinstance(val, FieldFile):
+                                val_str = val.name if (val and val.name) else ''
+                            elif val is None:
+                                val_str = ''
+                            else:
+                                val_str = str(val)
+                        except Exception:
+                            val_str = '[ERROR]'
 
-                     try:
-                         writer.writerow(row)
-                     except Exception as e: print(f"CSV Write Error for {model_class.__name__} PK {obj.pk}: {e}")
+                        row.append(val_str)
 
-                # Write the completed CSV string to the zip file on disk
-                zipf.writestr(f'{filename_base}.csv', csv_buffer.getvalue())
-                # No need to close csv_buffer here, it will be garbage collected
-                print(f"    Finished {filename_base}.csv")
+                    # Custom Many-to-Many handling for OplogEntry
+                    if model_class == OplogEntry:
+                        related_mitigations = list(obj.mitigations.all())
+                        mitigation_names_str = ", ".join(sorted([m.name for m in related_mitigations]))
+                        findings_list = [m.finding for m in related_mitigations if getattr(m, 'finding', None)]
+                        unique_findings_str = ", ".join(sorted(list(set(findings_list))))
+                        row.append(mitigation_names_str)
+                        row.append(unique_findings_str)
 
-            print("Finished CSV Export. Starting File Export...")
+                    csv_writer.writerow(row)
+                    txt_writer.writerow(row)
 
-            # --- 2. Export Uploaded Files ---
-            # (This section remains the same - writes directly to zipf on disk)
-            zip_base_folder = 'uploaded_files'
-            file_fields_to_export = [
-                (OplogEntry, 'screenshot'), (OplogEntry, 'enum'), (ExfilFile, 'file'),
-                (EnumerationData, 'scan_file'), (Payload, 'file'),
-            ]
-            for model_class, field_name in file_fields_to_export:
-                 # ... (keep the exact same file processing logic using zipf.write) ...
-                 print(f"  Processing files for {model_class.__name__}.{field_name}")
-                 queryset = model_class.objects.all()
-                 files_processed_count = 0
-                 for obj in queryset:
-                     file_field = getattr(obj, field_name)
-                     if file_field and file_field.name:
-                         try:
-                             full_path = file_field.path
-                             relative_path = file_field.name
-                             zip_path = os.path.join(zip_base_folder, relative_path)
-                             if os.path.exists(full_path):
-                                 zipf.write(full_path, arcname=zip_path)
-                                 files_processed_count += 1
-                             else: print(f"Warning: File missing on disk: {full_path}")
-                         except ValueError as e: print(f"Warning: ValueError accessing file path for {model_class.__name__} PK {obj.pk}, field={field_name}: {e}")
-                         except Exception as e: print(f"Warning: Error adding file {getattr(file_field, 'name', 'N/A')}: {e}")
-                 print(f"    Processed {files_processed_count} files for {model_class.__name__}.{field_name}")
-            print("Finished File Export.")
+                # Write both CSV and TXT files to the ZIP
+                zipf.writestr(f"tables/{filename_base}.csv", csv_buffer.getvalue())
+                zipf.writestr(f"tables/{filename_base}.txt", txt_buffer.getvalue())
 
-        # --- End of 'with zipfile.ZipFile(...)' block ---
-        # The temporary zip file on disk (temp_zip_path) is now complete and closed.
-        print(f"Temporary zip file closed on disk: {temp_zip_path}")
 
-        # --- 3. Prepare and Return HTTP Response using FileResponse ---
-        # Reopen the completed temporary zip file for reading by FileResponse
-        final_zip_file_handle = open(temp_zip_path, 'rb')
+            media_root = str(settings.MEDIA_ROOT)
+            if os.path.exists(media_root):
+                for root, _, files in os.walk(media_root):
+                    for file_name in files:
+                        file_path = os.path.join(root, file_name)
+                        rel_path = os.path.relpath(file_path, media_root)
+                        zipf.write(file_path, arcname=os.path.join('media', rel_path))
 
+
+        final_file_handle = open(temp_zip_path, 'rb')
+        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         response = FileResponse(
-            final_zip_file_handle,
+            final_file_handle,
             as_attachment=True,
-            filename=f'{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}_edc_export.zip'
+            filename=f"{timestamp_str}_edc_export.zip"
         )
-        print(f"Sending temporary zip file response: {temp_zip_path}")
-        # FileResponse will handle streaming and closing the final_zip_file_handle
-
         return response
 
-    except Exception as e:
-        # Log the exception more formally if needed in production
-        print(f"!!! EXPORT ERROR during zip creation or response preparation: {e}")
-        # Re-raise the exception for Django's debug page during development
-        raise # Or return HttpResponseServerError("An error occurred during export.")
-
-    finally:
-        # --- Clean up the temporary file from disk ---
+    except Exception:
         if temp_zip_path and os.path.exists(temp_zip_path):
             try:
-                print(f"Cleaning up temporary zip file: {temp_zip_path}")
                 os.remove(temp_zip_path)
-            except OSError as ose:
-                # Log this error, but don't prevent sending response if it was already created
-                print(f"Error cleaning up temp file {temp_zip_path}: {ose}")
-
+            except OSError:
+                pass
+        raise
 @staff_member_required # Ensure only staff can access
 def download_sqlite_db(request):
     """ Allows staff users to download a copy of the SQLite database file. """

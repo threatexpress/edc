@@ -1,7 +1,7 @@
 # collector/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import OplogEntry, Target, Credential, Payload, EnumerationData, Mitigation
+from .models import OplogEntry, OplogScreenshot, Target, Credential, Payload, EnumerationData, Mitigation
 from .utils import strip_non_printable
 from .utils import strip_illegal_json_control_chars
 from .utils import sanitize_string
@@ -54,12 +54,18 @@ class BaseSanitizingSerializer(serializers.ModelSerializer):
     #            
     #    return representation
 
+class OplogScreenshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OplogScreenshot
+        fields = ('id', 'image', 'uploaded_at')
+
 class OplogEntrySerializer(BaseSanitizingSerializer):
     # Make operator field read-only in the API representation,
     # but show username for context instead of just ID.
     operator = serializers.StringRelatedField(read_only=True)
     # Optionally show Target __str__ representation instead of just ID
     target = serializers.StringRelatedField(read_only=True, required=False)
+    screenshots = OplogScreenshotSerializer(many=True, read_only=True)
     # Allow writing target ID
     target_id = serializers.PrimaryKeyRelatedField(
         queryset=Target.objects.all(), source='target', write_only=True, required=False, allow_null=True
@@ -75,24 +81,7 @@ class OplogEntrySerializer(BaseSanitizingSerializer):
     class Meta:
         model = OplogEntry
         # Fields to include in the API response
-        fields = [
-            'id',
-            'operator', # Read-only representation from StringRelatedField
-            'target',   # Read-only representation from StringRelatedField
-            'target_id',# Write-only field for setting target
-            'timestamp',
-            'src_ip',
-            'src_host',
-            'src_port',
-            'command',
-            'output',
-            'tool',
-            'notes',
-            'screenshot',
-            'enum',
-            #'exfil_files', # Read-only list of related PKs or nested serializer
-            #'mitigations__name',
-        ]
+        fields = '__all__'
         # Make timestamp read-only as it's auto-set
         read_only_fields = ['timestamp'] # Operator is read_only via field definition
 
