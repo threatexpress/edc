@@ -36,6 +36,8 @@ urlpatterns = [
     path('oplog_exfil_file/<int:pk>/', views.view_oplog_exfil_file, name='oplog-view-exfil-file'),
     path('oplog/<int:pk>/view_enum/', views.view_oplog_enum_file_inline, name='oplog-view-enum-inline'),
     path('enumdata/<int:pk>/view_scanfile/', views.view_enum_scan_file_inline, name='enumdata-view-scanfile-inline'),
+    path('attack-paths/', views.attack_path_view, name='attack-paths'),
+    path('api/attack-paths/data/', views.attack_path_data_api, name='attack-paths-data'),
 
     # API URLs
     path('api/oplog/', views.OplogEntryListCreateAPIView.as_view(), name='api-oplog-list-create'),

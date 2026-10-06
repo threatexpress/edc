@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, get_object_or_404
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseServerError
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseServerError, JsonResponse
 from django.views import generic # Using generic class-based views for simplicity
 from django.views.decorators.http import require_POST # For the export view
 import json # To parse priorities from POST
@@ -28,6 +28,7 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from .serializers import OplogEntrySerializer, TargetSerializer, CredentialSerializer, PayloadSerializer, EnumerationDataSerializer
 from .models import Target, OplogEntry, Credential, EnumerationData, Payload, ExfilFile, Mitigation, Note
+from .graph import build_attack_graph_data
 
 # Class-based view for listing targets
 @login_required
@@ -663,3 +664,14 @@ def export_findings_csv(request):
         ])
 
     return response
+
+@login_required
+def attack_path_view(request):
+    """Renders the interactive Attack Path visualization page."""
+    return render(request, 'collector/attack_paths.html')
+
+@login_required
+def attack_path_data_api(request):
+    """Returns nodes and edges for the graph visualization."""
+    data = build_attack_graph_data()
+    return JsonResponse(data)
