@@ -155,11 +155,20 @@
                                     <p><strong>Output:</strong></p>
                                     <pre class="codeblock"><code>{{ detail.output }}</code></pre>
                                 {% endif %}
-                                {% if detail.screenshot_url %}
-                                    <p><strong>Screenshot:</strong></p>
+                                {% if detail.screenshots %}
+                                    <p><strong>Screenshots:</strong></p>
+                                    {% for s in detail.screenshots %}
+                                        <div style="margin-bottom: 10px;">
+                                            <a href="{{ s.url }}" target="_blank">
+                                                <img src="{{ s.url }}" style="max-width: 550px; border: 1px solid #ccc; border-radius: 3px;" />
+                                            </a>
+                                        </div>
+                                    {% endfor %}
+                                {% elif detail.screenshot_url %}
+                                    <p><strong>Screenshot:</strong><br/>
                                     <a href="{{ detail.screenshot_url }}" target="_blank">
-                                        <img src="{{ detail.screenshot_url }}" alt="Screenshot for entry {{ detail.id }}" class="screenshot">
-                                    </a>
+                                        <img src="{{ detail.screenshot_url }}" style="max-width: 500px;" />
+                                    </a></p>
                                 {% endif %}
                             </div>
                         {% empty %}

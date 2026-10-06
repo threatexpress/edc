@@ -20,7 +20,7 @@ class TokenInline(admin.StackedInline):
 
 # Define a new User admin
 class UserAdmin(BaseUserAdmin):
-    inlines = (TokenInline,)
+    inlines = ()#TokenInline,)
 
 # Re-register UserAdmin
 admin.site.unregister(User)
