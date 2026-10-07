@@ -73,18 +73,52 @@
                 const options = {
                     layout: {
                         hierarchical: {
-                            direction: "LR",        // Left-to-Right progression
+                            enabled: true,
+                            direction: "LR",              // Left to Right
                             sortMethod: "directed",
-                            levelSeparation: 180,
-                            nodeSpacing: 140
+                            levelSeparation: 260,         // Horizontal column separation
+                            nodeSpacing: 220,             // Vertical separation between sibling nodes
+                            treeSpacing: 240,
+                            blockShifting: true,
+                            edgeMinimization: false,      // Set to false to avoid collapsing sibling branches
+                            parentCentralization: false   // Prevents stacking children on parent centerline
                         }
                     },
-                    physics: false,
-                    edges: {
-                        smooth: { type: "cubicBezier", forceDirection: "horizontal" },
-                        font: { size: 11, align: "top" }
+                    physics: {
+                        enabled: true,
+                        hierarchicalRepulsion: {
+                            centralGravity: 0.0,
+                            springLength: 150,
+                            springConstant: 0.01,
+                            nodeDistance: 220,            // Enforces physical distance between nodes
+                            damping: 0.09
+                        },
+                        solver: "hierarchicalRepulsion",
+                        stabilization: {
+                            iterations: 150,
+                            updateInterval: 25
+                        }
                     },
-                    interaction: { hover: true }
+                    edges: {
+                        smooth: {
+                            enabled: true,
+                            type: "cubicBezier",
+                            forceDirection: "horizontal",
+                            roundness: 0.4
+                        },
+                        font: { 
+                            size: 11, 
+                            align: "middle",
+                            background: "#ffffff",
+                            strokeWidth: 2,
+                            strokeColor: "#ffffff"
+                        }
+                    },
+                    interaction: {
+                        hover: true,
+                        navigationButtons: true,
+                        zoomView: true
+                    }
                 };
 
                 const network = new vis.Network(container, graphData, options);
