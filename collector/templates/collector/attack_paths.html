@@ -13,9 +13,13 @@
     }
     #network-canvas {
         flex: 7;
+        height: 100%;
+        min-height: 550px;
+        width: 100%;
         background: #ffffff;
         border: 1px solid var(--border-color, #ccc);
         border-radius: 4px;
+        position: relative;
     }
     #details-panel {
         flex: 3;
@@ -62,9 +66,17 @@
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         fetch("{% url 'collector:attack-paths-data' %}")
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.json();
+            })
             .then(data => {
                 const container = document.getElementById('network-canvas');
+                if (!data.nodes || data.nodes.length === 0) {
+                    container.innerHTML = '<p style="padding:20px; color:#888;">No log entries found to construct attack paths.</p>';
+                    return;
+                }
+
                 const graphData = {
                     nodes: new vis.DataSet(data.nodes),
                     edges: new vis.DataSet(data.edges)
@@ -74,29 +86,25 @@
                     layout: {
                         hierarchical: {
                             enabled: true,
-                            direction: "LR",              // Left to Right
-                            sortMethod: "directed",
-                            levelSeparation: 260,         // Horizontal column separation
-                            nodeSpacing: 220,             // Vertical separation between sibling nodes
-                            treeSpacing: 240,
+                            direction: "LR",              // Left-to-Right progression
+                            sortMethod: "directed",       // Follows source -> target direction
+                            levelSeparation: 260,         // Spacing between columns/hops
+                            nodeSpacing: 180,             // Vertical spacing between parallel targets
+                            treeSpacing: 200,
                             blockShifting: true,
-                            edgeMinimization: false,      // Set to false to avoid collapsing sibling branches
-                            parentCentralization: false   // Prevents stacking children on parent centerline
+                            edgeMinimization: false,      // Prevent collapsing branches together
+                            parentCentralization: false   // Prevent stacking targets on a single center line
                         }
                     },
                     physics: {
                         enabled: true,
                         hierarchicalRepulsion: {
-                            centralGravity: 0.0,
-                            springLength: 150,
-                            springConstant: 0.01,
-                            nodeDistance: 220,            // Enforces physical distance between nodes
-                            damping: 0.09
+                            nodeDistance: 200
                         },
-                        solver: "hierarchicalRepulsion",
                         stabilization: {
-                            iterations: 150,
-                            updateInterval: 25
+                            enabled: true,
+                            iterations: 100,
+                            fit: true
                         }
                     },
                     edges: {
@@ -104,17 +112,19 @@
                             enabled: true,
                             type: "cubicBezier",
                             forceDirection: "horizontal",
-                            roundness: 0.4
+                            roundness: 0.2
                         },
                         font: { 
                             size: 11, 
-                            align: "middle",
+                            align: "horizontal",
                             background: "#ffffff",
                             strokeWidth: 2,
                             strokeColor: "#ffffff"
                         }
                     },
                     interaction: {
+                        dragNodes: true,
+                        dragView: true,
                         hover: true,
                         navigationButtons: true,
                         zoomView: true
@@ -123,40 +133,81 @@
 
                 const network = new vis.Network(container, graphData, options);
 
+                // 1. After initial layout stabilizes, disable global physics so nodes don't bounce back
+                network.once("stabilizationIterationsDone", function() {
+                    network.setOptions({ physics: { enabled: false } });
+                    network.fit();
+                });
+
+                // 2. Lock moved nodes upon drag completion so they stay permanently placed
+                network.on("dragEnd", function(params) {
+                    if (params.nodes && params.nodes.length > 0) {
+                        params.nodes.forEach(function(nodeId) {
+                            graphData.nodes.update({
+                                id: nodeId,
+                                fixed: {
+                                    x: true,
+                                    y: true
+                                }
+                            });
+                        });
+                    }
+                });
+
+                // 3. Selection inspector
                 network.on("click", function(params) {
                     const inspector = document.getElementById("inspector-content");
                     
                     if (params.edges.length > 0 && params.nodes.length === 0) {
                         const edgeId = params.edges[0];
                         const edge = graphData.edges.get(edgeId);
+                        
+                        let stepsHtml = "";
+                        if (edge.step_list && edge.step_list.length > 0) {
+                            stepsHtml = edge.step_list.map(s => `
+                                <div style="border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 8px;">
+                                    <strong>Step #${s.step} [${s.tool}]</strong>
+                                    <pre style="background:#eee; padding:6px; font-size:11px; white-space: pre-wrap;">${s.command || 'None'}</pre>
+                                    <div><strong>Finding:</strong> ${s.finding}</div>
+                                    <div><strong>Mitigations:</strong> ${s.mitigations}</div>
+                                    <div><strong>Notes:</strong> ${s.notes || 'None'}</div>
+                                </div>
+                            `).join("");
+                        } else {
+                            stepsHtml = `
+                                <div><strong>Action:</strong> ${edge.label}</div>
+                                <pre style="background:#eee; padding:6px; font-size:11px; white-space: pre-wrap;">${edge.command || 'None'}</pre>
+                                <div><strong>Notes:</strong> ${edge.notes || 'None'}</div>
+                            `;
+                        }
+
                         inspector.innerHTML = `
-                            <h4>Step #${edge.step} Transition</h4>
-                            <p><strong>From:</strong> ${edge.from}</p>
-                            <p><strong>To:</strong> ${edge.to}</p>
-                            <p><strong>Action / Protocol:</strong> ${edge.label}</p>
-                            <hr/>
-                            <p><strong>Command:</strong></p>
-                            <pre style="background:#eee; padding:6px;">${edge.command || 'None'}</pre>
-                            <p><strong>Notes:</strong> ${edge.notes || 'None'}</p>
+                            <h4>Transition: ${edge.from} &rarr; ${edge.to}</h4>
+                            ${stepsHtml}
                         `;
                     } else if (params.nodes.length > 0) {
                         const nodeId = params.nodes[0];
                         const node = graphData.nodes.get(nodeId);
-                        let actionsHtml = node.data.actions.map(a => 
-                            `<li><strong>Step ${a.step} [${a.tool || 'cmd'}]:</strong> <code>${a.command}</code><br/><em>${a.notes || ''}</em></li>`
+                        let actionsHtml = (node.data.actions || []).map(a => 
+                            `<li><strong>Step ${a.step} [${a.tool}]:</strong> <code>${a.command}</code><br/><em>${a.notes || ''}</em></li>`
                         ).join("");
 
                         inspector.innerHTML = `
-                            <h4>Host: ${node.label}</h4>
+                            <h4>Host: ${node.label.replace(/\n/g, ' ')}</h4>
                             <p><strong>IP:</strong> ${node.data.ip}</p>
                             <p><strong>Role:</strong> ${node.data.type.toUpperCase()}</p>
                             <p><strong>OS:</strong> ${node.data.os || 'N/A'}</p>
                             <hr/>
-                            <h5>Executed Objectives / Actions:</h5>
+                            <h5>Executed Objectives:</h5>
                             <ul>${actionsHtml || '<li>No direct actions executed on this host.</li>'}</ul>
                         `;
                     }
                 });
+            })
+            .catch(err => {
+                console.error("Error loading graph data:", err);
+                document.getElementById('network-canvas').innerHTML = 
+                    '<p style="color:red; padding:20px;">Failed to render graph. Check browser console.</p>';
             });
     });
 </script>
