@@ -1,5 +1,16 @@
 Refactor of the original EDC
 
+# If starting a new project. CAUTION: This reinitializes files. See Install for instructions.
+```
+django-admin startproject <project_name> .
+python manage.py startapp collector
+python manage.py makemigrations collector
+python manage.py migrate
+python manage.py createsuperuser
+uvicorn edc_project.asgi:application --host 0.0.0.0 --port 8889 --reload
+```
+
+
 ## Install
 Copy files to your run location
 
@@ -36,6 +47,32 @@ python manage.py createsuperuser
 Start the server
 ```
 uvicorn edc_project.asgi:application --host 0.0.0.0 --port 8889 --reload
+```
+
+### Firefox extension
+```
+In the url enter about:config and accept the risk
+ - set xpinstall.signatures.required to false
+
+In the url enter about:addons
+ - Choose "Extensions" and Click the Settings Icon on the top right
+ - Install Add-on from file > Choose the firefox_ext.xpi file
+ - Check both boxes to allow when they pop up.
+
+On the EDC Browser Collector preferences tab set the following:
+
+ - EDC API URL
+  -- <http://ip:port>/collector/api/oplog/
+
+ - API Token
+  -- Paste in your token
+
+Save settings
+
+You're done!
+
+If you need to mod the extension make the changes in firefox_ext, then;
+ - zip -FS -r firefox_ext.xpi * --exclude '*.git'
 ```
 
 Note: DEBUG is set to True. When deploying on an open or connected network, set to False
@@ -175,14 +212,4 @@ curl -X POST http://127.0.0.1:8000/collector/api/oplog/ \
            "notes": "Testing API POST",
            "target_id": 1
          }'
-```
-
-# If starting a new project. CAUTION: This reinitializes files
-```
-django-admin startproject <project_name> .
-python manage.py startapp collector
-python manage.py makemigrations collector
-python manage.py migrate
-python manage.py createsuperuser
-uvicorn edc_project.asgi:application --host 0.0.0.0 --port 8889 --reload
 ```
