@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>EDC Browser Collector Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 15px;
+      width: 320px;
+    }
+    .field {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    button {
+      margin-top: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <h3>EDC Browser Collector Configuration</h3>
+
+  <div class="field">
+    <label for="edc_url">EDC Server API URL:</label>
+    <input type="text" id="edc_url" placeholder="http://127.0.0.1:8889/collector/api/oplog/">
+  </div>
+
+  <div class="field">
+    <label for="edc_token">API Token:</label>
+    <input type="password" id="edc_token" placeholder="Token e4d...29a">
+  </div>
+
+  <div class="field">
+    <label for="default_tool">Tool Name:</label>
+    <input type="text" id="default_tool" value="firefox-esr">
+  </div>
+
+  <button id="save">Save Settings</button>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

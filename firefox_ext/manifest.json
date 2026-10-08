@@ -1,0 +1,32 @@
+{
+  "manifest_version": 2,
+  "name": "EDC Browser Collector",
+  "version": "1.0.0",
+  "description": "One-click collector for EDC logging.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "edc-oplog-collector@local"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "<all_urls>",
+    "storage",
+    "cookies",
+    "webRequest"
+  ],
+  "browser_action": {
+    "default_title": "Log to EDC",
+    "default_icon": {
+      "48": "icon.png"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "options_ui": {
+    "page": "options.html",
+    "browser_style": true
+  }
+}
