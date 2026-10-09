@@ -19,6 +19,11 @@ Start a venv and install requirements
 python3 -m venv venv
 source venv/bin/activate
 
+sudo apt install build-essential libtool autoconf imagemagick bsdextrautils curl zip
+pip install -r requirements.txt
+
+or
+
 pip install jq
 pip install django
 pip install Pillow
