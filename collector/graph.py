@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from collector.models import OplogEntry
+import datetime
 
 def build_attack_graph_data():
     # Parse oplog
@@ -16,8 +17,17 @@ def build_attack_graph_data():
     def clean_id(val):
         return str(val).strip() if val else ""
 
+    def to_epoch_ms(dt):
+        if not dt:
+            return 0
+        if isinstance(dt, datetime.datetime):
+            return int(dt.timestamp() * 1000)
+        return 0
+
     # Extract all systems and connections
     for idx, entry in enumerate(entries, start=1):
+        entry_time_ms = to_epoch_ms(entry.timestamp)
+
         src_ip = clean_id(entry.src_ip)
         src_host = clean_id(entry.src_host)
         src_id = src_ip or src_host or "Operator Host"
@@ -36,7 +46,9 @@ def build_attack_graph_data():
                 "ip": src_ip,
                 "type": src_type,
                 "os": "",
-                "actions": []
+                "actions": [],
+                # Root/operator node is available from t=0; pivots from first entry
+                "first_seen": 0 if (idx == 1 or src_type == "attacker") else entry_time_ms
             }
 
         dst_ip = ""
@@ -60,8 +72,13 @@ def build_attack_graph_data():
                 "ip": dst_ip,
                 "type": dst_type,
                 "os": dst_os,
-                "actions": []
+                "actions": [],
+                "first_seen": entry_time_ms
             }
+        else:
+            # Keep the earliest discovery timestamp for targets
+            if entry_time_ms and (nodes_raw[dst_id]["first_seen"] == 0 or entry_time_ms < nodes_raw[dst_id]["first_seen"]):
+                nodes_raw[dst_id]["first_seen"] = entry_time_ms
 
         previous_targets.add(dst_id)
         adj[src_id].add(dst_id)
@@ -93,7 +110,8 @@ def build_attack_graph_data():
             "output": entry.output,
             "notes": entry.notes,
             "finding": finding or "None",
-            "mitigations": ", ".join(mitigations) if mitigations else "None"
+            "mitigations": ", ".join(mitigations) if mitigations else "None",
+            "timestamp": entry_time_ms
         }
 
         hop_pair = (src_id, dst_id)
@@ -105,6 +123,8 @@ def build_attack_graph_data():
                 f"\n---\nStep: {idx}\nTool: {step_meta['tool']}\n"
                 f"Command: {step_meta['command'][:100]}\nFinding: {step_meta['finding']}"
             )
+            if entry_time_ms and (edge["first_seen"] == 0 or entry_time_ms < edge["first_seen"]):
+                edge["first_seen"] = entry_time_ms
         else:
             edges_map[hop_pair] = {
                 "id": f"edge_{src_id}_{dst_id}",
@@ -118,7 +138,8 @@ def build_attack_graph_data():
                     f"Step: {idx}\nTool: {step_meta['tool']}\n"
                     f"Command: {step_meta['command'][:100]}\nFinding: {step_meta['finding']}"
                 ),
-                "step_list": [step_meta]
+                "step_list": [step_meta],
+                "first_seen": entry_time_ms
             }
 
         nodes_raw[dst_id]["actions"].append(step_meta)
@@ -174,6 +195,7 @@ def build_attack_graph_data():
             "id": nid,
             "label": display_label,
             "level": node_levels.get(nid, 0),
+            "first_seen": nmeta["first_seen"],
             "shape": "box",
             "color": node_color,
             "font": {"color": "#ffffff", "face": "monospace", "multi": True},

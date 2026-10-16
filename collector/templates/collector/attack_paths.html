@@ -5,11 +5,52 @@
 {{ block.super }}
 <script type="text/javascript" src="{% static 'vendor/vis-network.min.js' %}"></script>
 <style>
+    /* Timeline Playback & Export Bar */
+    .timeline-container {
+        background: #1e1e2f;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 4px;
+        margin-top: 15px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .timeline-container button {
+        padding: 6px 14px;
+        background: #007acc;
+        border: none;
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 12px;
+    }
+    .timeline-container button:hover {
+        background: #005999;
+    }
+    .timeline-container button#btnRecord {
+        background: #e74c3c;
+    }
+    .timeline-container button#btnRecord:hover {
+        background: #c0392b;
+    }
+    .timeline-container input[type="range"] {
+        flex-grow: 1;
+        cursor: pointer;
+    }
+    .timeline-container span {
+        font-family: monospace;
+        font-size: 13px;
+        min-width: 220px;
+        text-align: right;
+    }
     .split-container {
         display: flex;
-        height: 78vh;
+        height: 76vh;
         gap: 15px;
-        margin-top: 15px;
     }
     #network-canvas {
         flex: 7;
@@ -54,6 +95,14 @@
     <span class="legend-tag" style="background:#e67e22;">Dashed Edge = Pivot Path</span>
 </div>
 
+<!-- Timeline Playback Slider & Export Controls -->
+<div class="timeline-container">
+    <button id="btnPlay">Play</button>
+    <button id="btnRecord">Record Video</button>
+    <input type="range" id="timeSlider" min="0" max="100" value="0">
+    <span id="timeLabel">Loading timeline...</span>
+</div>
+
 <div class="split-container">
     <div id="network-canvas"></div>
     <div id="details-panel">
@@ -74,10 +123,20 @@
                 const container = document.getElementById('network-canvas');
                 if (!data.nodes || data.nodes.length === 0) {
                     container.innerHTML = '<p style="padding:20px; color:#888;">No log entries found to construct attack paths.</p>';
+                    document.getElementById('timeLabel').innerText = 'No log data';
                     return;
                 }
 
-                // Temporary network purely to calculate the hierarchical tree coordinates
+                // 1. Calculate operational timeline boundaries (excluding root foothold t=0)
+                const timestamps = [];
+                data.nodes.forEach(n => { if (n.first_seen && n.first_seen > 0) timestamps.push(n.first_seen); });
+                data.edges.forEach(e => { if (e.first_seen && e.first_seen > 0) timestamps.push(e.first_seen); });
+
+                const minTime = timestamps.length ? Math.min(...timestamps) : 0;
+                const maxTime = timestamps.length ? Math.max(...timestamps) : 100;
+                let currentWindow = maxTime; // Default to full graph view on initial load
+
+                // 2. Temporary network purely to calculate hierarchical tree coordinates
                 const initData = {
                     nodes: new vis.DataSet(data.nodes),
                     edges: new vis.DataSet(data.edges)
@@ -106,21 +165,37 @@
 
                 let tempNetwork = new vis.Network(container, initData, layoutOptions);
 
-                // Once coordinates are generated, capture them and build the permanent free-drag canvas
+                // 3. Once coordinates are generated, capture them and build the permanent free-drag canvas
                 tempNetwork.once("stabilizationIterationsDone", function() {
                     const positions = tempNetwork.getPositions();
                     tempNetwork.destroy(); // Destroy calculation canvas
 
-                    // Embed coordinates directly into each node
-                    const finalNodes = data.nodes.map(n => ({
+                    // Embed coordinates directly into each node so positions stay static
+                    const positionedNodes = data.nodes.map(n => ({
                         ...n,
-                        x: positions[n.id].x,
-                        y: positions[n.id].y
+                        x: positions[n.id] ? positions[n.id].x : 0,
+                        y: positions[n.id] ? positions[n.id].y : 0
                     }));
 
+                    const rawNodesDataSet = new vis.DataSet(positionedNodes);
+                    const rawEdgesDataSet = new vis.DataSet(data.edges);
+
+                    // Dynamic DataViews for timeline filtering
+                    const nodesView = new vis.DataView(rawNodesDataSet, {
+                        filter: function(item) {
+                            return item.first_seen === 0 || item.first_seen <= currentWindow;
+                        }
+                    });
+
+                    const edgesView = new vis.DataView(rawEdgesDataSet, {
+                        filter: function(item) {
+                            return item.first_seen <= currentWindow;
+                        }
+                    });
+
                     const permanentData = {
-                        nodes: new vis.DataSet(finalNodes),
-                        edges: new vis.DataSet(data.edges)
+                        nodes: nodesView,
+                        edges: edgesView
                     };
 
                     const permanentOptions = {
@@ -139,10 +214,10 @@
                             },
                             font: { 
                                 size: 11, 
-                                align: "horizontal",
-                                background: "#ffffff",
-                                strokeWidth: 2,
-                                strokeColor: "#ffffff"
+                                align: "horizontal", 
+                                background: "#ffffff", 
+                                strokeWidth: 2, 
+                                strokeColor: "#ffffff" 
                             }
                         },
                         interaction: {
@@ -156,13 +231,141 @@
 
                     const network = new vis.Network(container, permanentData, permanentOptions);
 
-                    // Selection Inspector
+                    // 4. Connect UI Timeline Slider & Play Controls
+                    const slider = document.getElementById('timeSlider');
+                    const timeLabel = document.getElementById('timeLabel');
+                    const btnPlay = document.getElementById('btnPlay');
+                    const btnRecord = document.getElementById('btnRecord');
+
+                    slider.min = minTime;
+                    slider.max = maxTime;
+                    slider.value = maxTime;
+
+                    function formatTimestamp(epochMs) {
+                        if (!epochMs || epochMs === 0) return "Initial Foothold (T0)";
+                        const d = new Date(epochMs);
+                        return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+                    }
+
+                    function updateTimeline(val) {
+                        currentWindow = Number(val);
+                        slider.value = currentWindow;
+                        timeLabel.innerText = formatTimestamp(currentWindow);
+                        nodesView.refresh();
+                        edgesView.refresh();
+                    }
+
+                    slider.addEventListener('input', function(e) {
+                        updateTimeline(e.target.value);
+                    });
+
+                    let playInterval = null;
+                    btnPlay.addEventListener('click', function() {
+                        if (playInterval) {
+                            clearInterval(playInterval);
+                            playInterval = null;
+                            btnPlay.innerText = "Play";
+                        } else {
+                            if (Number(slider.value) >= maxTime) {
+                                updateTimeline(minTime);
+                            }
+                            btnPlay.innerText = "Pause";
+                            const step = Math.max(1000, Math.floor((maxTime - minTime) / 100));
+                            playInterval = setInterval(function() {
+                                let nextVal = Number(slider.value) + step;
+                                if (nextVal >= maxTime) {
+                                    nextVal = maxTime;
+                                    clearInterval(playInterval);
+                                    playInterval = null;
+                                    btnPlay.innerText = "Play";
+                                }
+                                updateTimeline(nextVal);
+                            }, 120);
+                        }
+                    });
+
+                    // 5. HTML5 Canvas Native Video Recorder (.webm download)
+                    btnRecord.addEventListener('click', function() {
+                        const canvas = container.querySelector('canvas');
+                        if (!canvas) {
+                            alert("Canvas element not found.");
+                            return;
+                        }
+
+                        const stream = canvas.captureStream(30);
+                        const recordedChunks = [];
+                        let options = { mimeType: 'video/webm; codecs=vp9' };
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: 'video/webm' };
+                        }
+
+                        const recorder = new MediaRecorder(stream, options);
+
+                        recorder.ondataavailable = function(e) {
+                            if (e.data.size > 0) {
+                                recordedChunks.push(e.data);
+                            }
+                        };
+
+                        recorder.onstop = function() {
+                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            a.download = `attack_path_timeline_${Date.now()}.webm`;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => {
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                            }, 150);
+
+                            btnRecord.innerText = "Record Video";
+                            btnRecord.style.background = "#e74c3c";
+                            btnRecord.disabled = false;
+                            btnPlay.disabled = false;
+                        };
+
+                        btnRecord.innerText = "Recording...";
+                        btnRecord.style.background = "#7f8c8d";
+                        btnRecord.disabled = true;
+                        btnPlay.disabled = true;
+
+                        if (playInterval) {
+                            clearInterval(playInterval);
+                            playInterval = null;
+                            btnPlay.innerText = "Play";
+                        }
+
+                        updateTimeline(minTime);
+                        recorder.start();
+
+                        const step = Math.max(1000, Math.floor((maxTime - minTime) / 100));
+                        const recordInterval = setInterval(function() {
+                            let nextVal = Number(slider.value) + step;
+                            if (nextVal >= maxTime) {
+                                updateTimeline(maxTime);
+                                clearInterval(recordInterval);
+                                setTimeout(() => {
+                                    recorder.stop();
+                                }, 500);
+                            } else {
+                                updateTimeline(nextVal);
+                            }
+                        }, 100);
+                    });
+
+                    // Initial view loads fully populated
+                    updateTimeline(maxTime);
+
+                    // 6. Selection Inspector
                     network.on("click", function(params) {
                         const inspector = document.getElementById("inspector-content");
                         
                         if (params.edges.length > 0 && params.nodes.length === 0) {
                             const edgeId = params.edges[0];
-                            const edge = permanentData.edges.get(edgeId);
+                            const edge = rawEdgesDataSet.get(edgeId);
                             
                             let stepsHtml = "";
                             if (edge.step_list && edge.step_list.length > 0) {
@@ -189,7 +392,7 @@
                             `;
                         } else if (params.nodes.length > 0) {
                             const nodeId = params.nodes[0];
-                            const node = permanentData.nodes.get(nodeId);
+                            const node = rawNodesDataSet.get(nodeId);
                             let actionsHtml = (node.data.actions || []).map(a => 
                                 `<li><strong>Step ${a.step} [${a.tool}]:</strong> <code>${a.command}</code><br/><em>${a.notes || ''}</em></li>`
                             ).join("");
