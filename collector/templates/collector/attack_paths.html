@@ -127,7 +127,7 @@
                     return;
                 }
 
-                // 1. Calculate operational timeline boundaries (excluding root foothold t=0)
+                // Operational timeline boundaries (excluding initial system foothold t=0)
                 const timestamps = [];
                 data.nodes.forEach(n => { if (n.first_seen && n.first_seen > 0) timestamps.push(n.first_seen); });
                 data.edges.forEach(e => { if (e.first_seen && e.first_seen > 0) timestamps.push(e.first_seen); });
@@ -136,7 +136,7 @@
                 const maxTime = timestamps.length ? Math.max(...timestamps) : 100;
                 let currentWindow = maxTime; // Default to full graph view on initial load
 
-                // 2. Temporary network purely to calculate hierarchical tree coordinates
+                // Temporary - maths hierarchical tree coordinates
                 const initData = {
                     nodes: new vis.DataSet(data.nodes),
                     edges: new vis.DataSet(data.edges)
@@ -165,12 +165,12 @@
 
                 let tempNetwork = new vis.Network(container, initData, layoutOptions);
 
-                // 3. Once coordinates are generated, capture them and build the permanent free-drag canvas
+                // Capture generated coordinates and build the canvas
                 tempNetwork.once("stabilizationIterationsDone", function() {
                     const positions = tempNetwork.getPositions();
                     tempNetwork.destroy(); // Destroy calculation canvas
 
-                    // Embed coordinates directly into each node so positions stay static
+                    // Put coordinates into nodes
                     const positionedNodes = data.nodes.map(n => ({
                         ...n,
                         x: positions[n.id] ? positions[n.id].x : 0,
@@ -180,7 +180,7 @@
                     const rawNodesDataSet = new vis.DataSet(positionedNodes);
                     const rawEdgesDataSet = new vis.DataSet(data.edges);
 
-                    // Dynamic DataViews for timeline filtering
+                    // Dynamic data views for timeline filtering
                     const nodesView = new vis.DataView(rawNodesDataSet, {
                         filter: function(item) {
                             return item.first_seen === 0 || item.first_seen <= currentWindow;
@@ -200,10 +200,10 @@
 
                     const permanentOptions = {
                         layout: {
-                            hierarchical: { enabled: false } // Disabled so nodes never snap back
+                            hierarchical: { enabled: false } // Disabled so nodes don't move back
                         },
                         physics: {
-                            enabled: false // Zero physics: nodes only move when mouse moves them
+                            enabled: false // (zero physics) nodes only move when mouse moves them
                         },
                         edges: {
                             smooth: {
@@ -231,7 +231,7 @@
 
                     const network = new vis.Network(container, permanentData, permanentOptions);
 
-                    // 4. Connect UI Timeline Slider & Play Controls
+                    // UI slider & play control
                     const slider = document.getElementById('timeSlider');
                     const timeLabel = document.getElementById('timeLabel');
                     const btnPlay = document.getElementById('btnPlay');
@@ -284,7 +284,7 @@
                         }
                     });
 
-                    // 5. HTML5 Canvas Native Video Recorder (.webm download)
+                    // HTML5 canvas vid record (.webm download)
                     btnRecord.addEventListener('click', function() {
                         const canvas = container.querySelector('canvas');
                         if (!canvas) {
@@ -356,10 +356,10 @@
                         }, 100);
                     });
 
-                    // Initial view loads fully populated
+                    // Populate initial view
                     updateTimeline(maxTime);
 
-                    // 6. Selection Inspector
+                    // Inspector
                     network.on("click", function(params) {
                         const inspector = document.getElementById("inspector-content");
                         

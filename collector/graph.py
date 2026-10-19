@@ -76,7 +76,7 @@ def build_attack_graph_data():
                 "first_seen": entry_time_ms
             }
         else:
-            # Keep the earliest discovery timestamp for targets
+            # Keep the earliest discovery timestamp for targets (stop updating position for new entries)
             if entry_time_ms and (nodes_raw[dst_id]["first_seen"] == 0 or entry_time_ms < nodes_raw[dst_id]["first_seen"]):
                 nodes_raw[dst_id]["first_seen"] = entry_time_ms
 
@@ -144,7 +144,7 @@ def build_attack_graph_data():
 
         nodes_raw[dst_id]["actions"].append(step_meta)
 
-    # Calculate topological hop levels (BFS from root/initial attacker)
+    # Hop level (from initial attacker)
     node_levels = {}
     queue = deque()
     
@@ -166,7 +166,7 @@ def build_attack_graph_data():
         if nid not in node_levels:
             node_levels[nid] = 1
 
-    # Build formatted vis.js structure
+    # Build vis.js structure
     colors = {
         "attacker": {"background": "#e74c3c", "border": "#c0392b"},
         "c2": {"background": "#8e44ad", "border": "#732d91"},
