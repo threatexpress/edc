@@ -30,6 +30,136 @@ mkdir -p "${ZSH_LOG_DIRECTORY}/screenshots"
 mkdir -p "${ZSH_LOG_DIRECTORY}/pcaps"
 mkdir -p "${ZSH_LOG_DIRECTORY}/terminals"
 
+# ==============================================================================
+# EDC HOOKS
+# ==============================================================================
+autoload -Uz add-zsh-hook
+
+typeset -a EDC_AUTO_TOOLS
+EDC_AUTO_TOOLS=(
+    "crackmapexec" "curl" "dig" "dirsearch" "enum4linux" "evil-winrm" "feroxbuster" 
+    "ffuf" "ftp" "gobuster" "grpcui" "grpcurl" "hashcat" "hydra" "impacket-*" "john" 
+    "kartoffel" "kerbrute" "kr" "ldapsearch" "ligolo-ng" "mongo" "mongodump" "mount" 
+    "msfconsole" "msfvenom" "mysql" "netdiscover" "netexec" "nikto" "nmap" "nslookup" 
+    "nuclei" "nxc" "onesixtyone" "proxychains" "proxychains4" "psexec" "responder" 
+    "rpcclient" "secretsdump" "showmount" "smbclient" "smbexec" "smbmap" "snmpwalk" 
+    "sqlmap" "ssh" "sshuttle" "telnet" "wget" "wmiexec" "wpscan" "xfreerdp"
+)
+
+# track state
+typeset -g _EDC_ACTIVE_CMD=""
+typeset -g _EDC_ACTIVE_TOOL=""
+typeset -g _EDC_IS_TRACKED=0
+
+_edc_extract_binary() {
+    local cmd_line="$1"
+    cmd_line=$(echo "$cmd_line" | sed -E 's/^(sudo|env|[A-Za-z0-9_]+=[^ ]+) +//')
+    echo "$cmd_line" | awk '{print $1}'
+}
+
+_edc_is_tool_whitelisted() {
+    local bin="$1"
+    for pattern in "${EDC_AUTO_TOOLS[@]}"; do
+        if [[ "$bin" == ${~pattern} ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+edc_preexec_hook() {
+    local cmd="$1"
+    local bin=$(_edc_extract_binary "$cmd")
+
+    # Hopefully prevent recursive logging on manual logs
+    if [[ "$bin" == "log" || "$bin" == "sst" || "$bin" == "target" || "$bin" == "cred" || "$bin" == "enum" ]]; then
+        _EDC_IS_TRACKED=0
+        return
+    fi
+
+    if _edc_is_tool_whitelisted "$bin"; then
+        _EDC_IS_TRACKED=1
+        _EDC_ACTIVE_CMD="$cmd"
+        _EDC_ACTIVE_TOOL="$bin"
+
+        # Record file size of raw session prior to cmd exec
+        if [[ -n "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" && -f "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" ]]; then
+            _EDC_RAW_OFFSET=$(stat -c%s "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" 2>/dev/null || stat -f%z "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" 2>/dev/null || echo 0)
+        else
+            _EDC_RAW_OFFSET=0
+        fi
+    else
+        _EDC_IS_TRACKED=0
+    fi
+}
+
+edc_precmd_hook() {
+    local exit_code=$?
+
+    if [[ "$_EDC_IS_TRACKED" -eq 1 ]]; then
+        local ts=$(date +%Y%m%d_%H%M%S)
+        local snap_path="${ZSH_LOG_DIRECTORY}/${ts}_snap.png"
+        local captured_output=""
+
+        # Capture display when command finishes
+        if command -v import &>/dev/null && [[ -n "$DISPLAY" ]]; then
+            import -window root "$snap_path" 2>/dev/null
+        fi
+
+        # Extract output from terminal session log
+        if [[ -n "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" && -f "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" ]]; then
+            local current_size
+            current_size=$(stat -c%s "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" 2>/dev/null || stat -f%z "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" 2>/dev/null || echo 0)
+            local bytes_to_read=$(( current_size - _EDC_RAW_OFFSET ))
+
+            if [[ $bytes_to_read -gt 0 ]]; then
+                # Tail bytes generated for this command
+                captured_output=$(tail -c "$bytes_to_read" "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH" 2>/dev/null \
+                    | perl -pe 's/\x1b(\[([0-9;?]*[a-zA-Z])|\].*?(\x07|\x1b\\))//g' \
+                    | col -b \
+                    | tr -d '\000-\010\013\014\016-\037' \
+                    | sed 's/[^[:print:][:space:]]//g')
+            fi
+        fi
+
+        # Don't error if session transcript is empty
+        if [[ -z "$captured_output" ]]; then
+            captured_output="Command completed with exit code ${exit_code}"
+        fi
+
+        # Build POST for submission
+        (
+            local post_args=(
+                -s -o /dev/null
+                -X POST "${EDC_API_URL}/collector/api/oplog/"
+                -H "Authorization: Token ${EDC_API_TOKEN}"
+                -F "tool=${_EDC_ACTIVE_TOOL}"
+                -F "command=${_EDC_ACTIVE_CMD}"
+                -F "output=${captured_output}"
+                -F "notes=Automated capture (Exit: ${exit_code})"
+            )
+
+            if command -v my_ip &>/dev/null; then
+                post_args+=(-F "src_ip=$(my_ip)")
+            fi
+
+            if [[ -f "$snap_path" && -s "$snap_path" ]]; then
+                post_args+=(-F "screenshots=@${snap_path};type=image/png")
+            fi
+
+            curl "${post_args[@]}" &
+        ) &!
+
+        # set state
+        _EDC_IS_TRACKED=0
+        _EDC_ACTIVE_CMD=""
+        _EDC_ACTIVE_TOOL=""
+    fi
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec edc_preexec_hook
+add-zsh-hook precmd edc_precmd_hook
 
 # ==============================================================================
 #                         Standard Zsh Configuration
@@ -184,10 +314,11 @@ toggle_oneline_prompt(){
 zle -N toggle_oneline_prompt
 bindkey ^P toggle_oneline_prompt
 
-precmd() {
+prompt_precmd_hook() {
     print -Pnr -- "$TERM_TITLE"
     if [ "$NEWLINE_BEFORE_PROMPT" = yes ]; then if [ -z "$_NEW_LINE_BEFORE_PROMPT" ]; then _NEW_LINE_BEFORE_PROMPT=1; else print ""; fi; fi
 }
+add-zsh-hook precmd prompt_precmd_hook
 
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
@@ -350,6 +481,8 @@ function sst() {
 # ==============================================================================
 
 # Define a local cache directory for script logs
+export CURDATE="$(date +%Y%m%d)"
+export _ZSH_SCRIPT_SESSION_RAW_LOG_PATH="${_ZSH_SCRIPT_SESSION_RAW_LOG_PATH:-}"
 LOCAL_SCRIPT_LOG_CACHE_DIR="${HOME}/.cache/zsh_script_logs_cache"
 if [ ! -d "${LOCAL_SCRIPT_LOG_CACHE_DIR}" ]; then
     mkdir -p "${LOCAL_SCRIPT_LOG_CACHE_DIR}"
@@ -357,7 +490,7 @@ fi
 
 # Global variable to store the path to the raw log file for the current script session
 # Prefixing with underscore is a common convention for "private" or internal-use global variables.
-_ZSH_SCRIPT_SESSION_RAW_LOG_PATH=""
+#_ZSH_SCRIPT_SESSION_RAW_LOG_PATH=""
 
 # Function to be called on Zsh exit to process and move the script log
 _zsh_script_log_cleanup() {
@@ -426,11 +559,12 @@ if [[ "$TERM" == "xterm"* || "$TERM" == "screen"* || "$TERM_PROGRAM" == "tmux" |
         if [[ -n "$current_tty" && ("$current_tty" == /dev/pts/* || "$current_tty" == /dev/ttyS*) ]]; then
             export SCRIPT_LOG_ACTIVE=1 # Mark that this Zsh process has initiated script logging
 
-            local log_timestamp_suffix="$(date +%s)"
+            local log_timestamp_suffix="$(date +%Y%m%d_%H%M%S)"
             local base_log_filename_for_session="${CURDATE}_${operator}_${HOSTNAME_SHORT}_${log_timestamp_suffix}_terminal"
 
             # Set the global path for the raw log file for this session
-            _ZSH_SCRIPT_SESSION_RAW_LOG_PATH="${LOCAL_SCRIPT_LOG_CACHE_DIR}/${base_log_filename_for_session}.log.raw"
+            export _ZSH_SCRIPT_SESSION_RAW_LOG_PATH="${LOCAL_SCRIPT_LOG_CACHE_DIR}/${base_log_filename_for_session}.log.raw"
+            touch "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH"
             
             # Set the EXIT trap *before* starting the script command
             # This function will be called when the *current* Zsh shell (the one sourcing .zshrc) exits.
@@ -448,7 +582,7 @@ if [[ "$TERM" == "xterm"* || "$TERM" == "screen"* || "$TERM_PROGRAM" == "tmux" |
                 printf "ERROR: The 'script' command failed to start or exited abnormally (code %s).\n" "$script_exit_code"
                 printf "       Raw log may not exist or is incomplete at: %s\n" "$_ZSH_SCRIPT_SESSION_RAW_LOG_PATH"
                 # If script fails to start, we should clear the path so the trap doesn't try to process a non-existent/failed log
-                _ZSH_SCRIPT_SESSION_RAW_LOG_PATH=""
+                export _ZSH_SCRIPT_SESSION_RAW_LOG_PATH=""
                 # Also unset SCRIPT_LOG_ACTIVE so a subsequent attempt (e.g. new shell) might work
                 unset SCRIPT_LOG_ACTIVE 
                 # Unset the trap as well if script didn't even run
